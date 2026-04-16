@@ -9,6 +9,15 @@ import { db, auth } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 
+/* 🔥 ここがSEO追加（超重要） */
+export const metadata = {
+  title: "IZUscape | 偶然の旅に出会う",
+  description: "体験を共有する新しい旅アプリ",
+  verification: {
+    google: "0mqKcyIcpKVATqdYV6PBIupiSWWz2N5OzxaGs53jKmg",
+  },
+};
+
 export default function RootLayout({
   children,
 }: {
@@ -18,7 +27,6 @@ export default function RootLayout({
   const [isLogin, setIsLogin] = useState(false);
   const [currentUser, setCurrentUser] = useState<string | null>(null);
 
-  // 🔥 ログイン状態
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
@@ -39,7 +47,6 @@ export default function RootLayout({
     return () => unsubscribe();
   }, []);
 
-  // 🔥 ログアウト
   const handleLogout = async () => {
     await signOut(auth);
   };
@@ -48,17 +55,14 @@ export default function RootLayout({
     <html lang="ja">
       <body style={{ margin: 0, background: "#f5f5f5" }}>
         
-        {/* ================= HEADER ================= */}
+        {/* HEADER */}
         <header style={header}>
           <div style={headerInner}>
-            
-            {/* ロゴ */}
             <Link href="/" style={logoWrap}>
               <Image src="/logo.png" alt="IZUscape" width={28} height={28} />
               <span style={logoText}>IZUscape</span>
             </Link>
 
-            {/* 右ナビ */}
             <div style={navWrap}>
               <Link href="/post" style={navText}>投稿</Link>
               <Link href="/saved" style={navText}>保存</Link>
@@ -82,12 +86,12 @@ export default function RootLayout({
           </div>
         </header>
 
-        {/* ================= MAIN ================= */}
+        {/* MAIN */}
         <main style={main}>
           {children}
         </main>
 
-        {/* ================= 🔥 下タブ ================= */}
+        {/* 下タブ */}
         <nav style={bottomNav}>
           <Link href="/" style={tab}>🏠</Link>
           <Link href="/post" style={tab}>➕</Link>
@@ -109,7 +113,7 @@ export default function RootLayout({
   );
 }
 
-/* ================= STYLE ================= */
+/* STYLE */
 
 const header: React.CSSProperties = {
   position: "fixed",
@@ -153,7 +157,6 @@ const navText: React.CSSProperties = {
   fontSize: "14px",
   color: "#333",
   textDecoration: "none",
-  whiteSpace: "nowrap",
 };
 
 const avatar: React.CSSProperties = {
@@ -171,17 +174,15 @@ const logoutStyle: React.CSSProperties = {
   cursor: "pointer",
 };
 
-/* 🔥 メイン（上下余白が超重要） */
 const main: React.CSSProperties = {
   paddingTop: "70px",
-  paddingBottom: "70px", // ←下タブ対策
+  paddingBottom: "70px",
   maxWidth: "500px",
   margin: "0 auto",
   paddingLeft: "16px",
   paddingRight: "16px",
 };
 
-/* 🔥 下タブ */
 const bottomNav: React.CSSProperties = {
   position: "fixed",
   bottom: 0,
