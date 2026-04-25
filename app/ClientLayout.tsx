@@ -1,195 +1,433 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { db, auth } from "@/lib/firebase";
-import { doc, getDoc } from "firebase/firestore";
-import { onAuthStateChanged, signOut } from "firebase/auth";
+import { auth, db } from "@/lib/firebase";
+import {
+  onAuthStateChanged,
+  signOut,
+} from "firebase/auth";
+
+import {
+  doc,
+  getDoc,
+} from "firebase/firestore";
 
 export default function ClientLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const [avatarUrl, setAvatarUrl] = useState("/default.png");
-  const [isLogin, setIsLogin] = useState(false);
-  const [currentUser, setCurrentUser] = useState<string | null>(null);
+  const pathname = usePathname();
+  const router = useRouter();
 
+  const [user, setUser] = useState<any>(null);
+  const [profileImage, setProfileImage] =
+    useState("");
+
+  // ログイン状態取得 + プロフィール画像取得
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        setIsLogin(true);
-        setCurrentUser(user.uid);
+    const unsubscribe =
+      onAuthStateChanged(
+        auth,
+        async (currentUser) => {
+          setUser(currentUser);
 
-        const snap = await getDoc(doc(db, "users", user.uid));
-        if (snap.exists()) {
-          setAvatarUrl(snap.data().avatarUrl || "/default.png");
+          if (currentUser) {
+            try {
+              const ref = doc(
+                db,
+                "users",
+                currentUser.uid
+              );
+
+              const snap =
+                await getDoc(ref);
+
+              if (snap.exists()) {
+                const data: any =
+                  snap.data();
+
+                setProfileImage(
+                  data.photoURL || ""
+                );
+              }
+            } catch (error) {
+              console.error(error);
+            }
+          } else {
+            setProfileImage("");
+          }
         }
-      } else {
-        setIsLogin(false);
-        setCurrentUser(null);
-        setAvatarUrl("/default.png");
-      }
-    });
+      );
 
     return () => unsubscribe();
   }, []);
 
+  const isActive = (path: string) => {
+    return pathname === path;
+  };
+
+  // ログアウト
   const handleLogout = async () => {
-    await signOut(auth);
+    const ok = confirm(
+      "ログアウトしますか？"
+    );
+
+    if (!ok) return;
+
+    try {
+      await signOut(auth);
+      alert("ログアウトしました");
+      router.push("/login");
+    } catch (error) {
+      console.error(error);
+      alert("ログアウトに失敗しました");
+    }
   };
 
   return (
     <>
-      {/* HEADER */}
-      <header style={header}>
-        <div style={headerInner}>
-          <Link href="/" style={logoWrap}>
-            <Image src="/logo.png" alt="IZUscape" width={28} height={28} />
-            <span style={logoText}>IZUscape</span>
-          </Link>
+      {/* 上ヘッダー */}
+      <header className="header">
+        <Link href="/" style={logo}>
+          IZUscape
+        </Link>
 
-          <div style={navWrap}>
-            <Link href="/post" style={navText}>投稿</Link>
-            <Link href="/saved" style={navText}>保存</Link>
-
-            {isLogin ? (
-              <>
-                <Link href={`/profile/${currentUser}`}>
-                  <img src={avatarUrl} style={avatar} />
-                </Link>
-
-                <button onClick={handleLogout} style={logoutStyle}>
-                  ログアウト
-                </button>
-              </>
-            ) : (
-              <Link href="/login" style={navText}>
-                ログイン
+        <div style={headerRight}>
+          {user ? (
+            <>
+              <Link
+                href="/post"
+                style={headerLink}
+              >
+                投稿
               </Link>
-            )}
-          </div>
+
+              <Link
+                href="/saved"
+                style={headerLink}
+              >
+                保存
+              </Link>
+
+              {/* 上プロフィール画像 */}
+              <Link
+                href={`/profile/${user.uid}`}
+                style={profileLink}
+              >
+                {profileImage ? (
+                  <img
+                    src={profileImage}
+                    alt="profile"
+                    style={profileImg}
+                  />
+                ) : (
+                  <div
+                    style={fallbackIcon}
+                  >
+                    👤
+                  </div>
+                )}
+              </Link>
+
+              <button
+                onClick={handleLogout}
+                style={logoutBtn}
+              >
+                ログアウト
+              </button>
+            </>
+          ) : (
+            <Link
+              href="/login"
+              style={loginBtn}
+            >
+              ログイン
+            </Link>
+          )}
         </div>
       </header>
 
-      {/* MAIN */}
-      <main style={main}>
+      {/* メイン */}
+      <main
+        style={{
+          paddingBottom: "110px",
+        }}
+      >
         {children}
       </main>
 
-      {/* 下タブ */}
-      <nav style={bottomNav}>
-        <Link href="/" style={tab}>🏠</Link>
-        <Link href="/post" style={tab}>➕</Link>
-        <Link href="/saved" style={tab}>❤️</Link>
-
+      {/* 下ナビ */}
+      <footer style={footer}>
+        {/* ホーム */}
         <Link
-          href={isLogin && currentUser ? `/profile/${currentUser}` : "/login"}
-          style={tab}
-        >
-          {isLogin ? (
-            <img src={avatarUrl} style={tabAvatar} />
-          ) : (
-            "👤"
+          href="/"
+          style={navItem(
+            isActive("/")
           )}
+        >
+          <div
+            style={iconCircle(
+              isActive("/")
+            )}
+          >
+            🏠
+          </div>
+          <span>ホーム</span>
         </Link>
-      </nav>
+
+        {/* 探す */}
+        <Link
+          href="/area/shimoda"
+          style={navItem(
+            pathname.includes(
+              "/area"
+            )
+          )}
+        >
+          <div
+            style={iconCircle(
+              pathname.includes(
+                "/area"
+              )
+            )}
+          >
+            🔍
+          </div>
+          <span>探す</span>
+        </Link>
+
+        {/* 投稿 */}
+        <Link
+          href={
+            user
+              ? "/post"
+              : "/login"
+          }
+          style={centerPost}
+        >
+          <div style={postCircle}>
+            ＋
+          </div>
+
+          <span style={postText}>
+            投稿
+          </span>
+        </Link>
+
+        {/* 保存 */}
+        <Link
+          href={
+            user
+              ? "/saved"
+              : "/login"
+          }
+          style={navItem(
+            isActive("/saved")
+          )}
+        >
+          <div
+            style={iconCircle(
+              isActive("/saved")
+            )}
+          >
+            ❤️
+          </div>
+          <span>保存</span>
+        </Link>
+
+        {/* マイ */}
+        <Link
+          href={
+            user
+              ? `/profile/${user.uid}`
+              : "/login"
+          }
+          style={navItem(
+            pathname.includes(
+              "/profile"
+            )
+          )}
+        >
+          {profileImage ? (
+            <img
+              src={profileImage}
+              alt="profile"
+              style={
+                bottomProfileImg
+              }
+            />
+          ) : (
+            <div
+              style={iconCircle(
+                pathname.includes(
+                  "/profile"
+                )
+              )}
+            >
+              👤
+            </div>
+          )}
+
+          <span>マイ</span>
+        </Link>
+      </footer>
     </>
   );
 }
 
-/* STYLE */
+////////////////////////////////////////////////
 
-const header: React.CSSProperties = {
-  position: "fixed",
-  top: 0,
-  left: 0,
-  width: "100%",
-  background: "#fff",
-  borderBottom: "1px solid #eee",
-  zIndex: 1000,
-};
-
-const headerInner: React.CSSProperties = {
-  maxWidth: "500px",
-  margin: "0 auto",
-  padding: "10px 16px",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-};
-
-const logoWrap: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: "8px",
-  textDecoration: "none",
-};
-
-const logoText: React.CSSProperties = {
+const logo = {
   fontWeight: "bold",
-  fontSize: "20px",
-  color: "#111",
-};
-
-const navWrap: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: "12px",
-};
-
-const navText: React.CSSProperties = {
-  fontSize: "14px",
-  color: "#333",
+  fontSize: "28px",
+  color: "#1F3D2B",
   textDecoration: "none",
 };
 
-const avatar: React.CSSProperties = {
-  width: "28px",
-  height: "28px",
+const headerRight = {
+  display: "flex",
+  alignItems: "center",
+  gap: "18px",
+};
+
+const headerLink = {
+  textDecoration: "none",
+  color: "#333",
+  fontWeight: "600",
+  fontSize: "14px",
+};
+
+const profileLink = {
+  textDecoration: "none",
+};
+
+const profileImg = {
+  width: "40px",
+  height: "40px",
   borderRadius: "50%",
-  objectFit: "cover",
+  objectFit: "cover" as const,
 };
 
-const logoutStyle: React.CSSProperties = {
-  fontSize: "12px",
-  color: "#666",
-  background: "none",
+const bottomProfileImg = {
+  width: "42px",
+  height: "42px",
+  borderRadius: "50%",
+  objectFit: "cover" as const,
+  background: "#EAF5EF",
+};
+
+const fallbackIcon = {
+  width: "40px",
+  height: "40px",
+  borderRadius: "50%",
+  background: "#EAF5EF",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: "20px",
+};
+
+const loginBtn = {
+  textDecoration: "none",
+  background: "#1F3D2B",
+  color: "#fff",
+  padding: "10px 18px",
+  borderRadius: "999px",
+  fontWeight: "bold",
+  fontSize: "14px",
+};
+
+const logoutBtn = {
   border: "none",
+  background: "transparent",
+  color: "#666",
   cursor: "pointer",
+  fontWeight: "600",
+  fontSize: "14px",
 };
 
-const main: React.CSSProperties = {
-  paddingTop: "70px",
-  paddingBottom: "70px",
-  maxWidth: "500px",
-  margin: "0 auto",
-  paddingLeft: "16px",
-  paddingRight: "16px",
-};
-
-const bottomNav: React.CSSProperties = {
-  position: "fixed",
+const footer = {
+  position: "fixed" as const,
   bottom: 0,
   left: 0,
   width: "100%",
-  background: "#fff",
+  background:
+    "rgba(255,255,255,0.95)",
+  backdropFilter: "blur(10px)",
   borderTop: "1px solid #eee",
   display: "flex",
   justifyContent: "space-around",
-  padding: "10px 0",
-  zIndex: 1000,
+  alignItems: "center",
+  padding: "10px 0 14px",
+  zIndex: 999,
+  boxShadow:
+    "0 -4px 20px rgba(0,0,0,0.04)",
 };
 
-const tab: React.CSSProperties = {
-  fontSize: "20px",
+const navItem = (
+  active: boolean
+) => ({
+  display: "flex",
+  flexDirection: "column" as const,
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: "11px",
+  color: active
+    ? "#1F3D2B"
+    : "#999",
   textDecoration: "none",
+  fontWeight: active
+    ? "bold"
+    : "normal",
+  gap: "6px",
+});
+
+const iconCircle = (
+  active: boolean
+) => ({
+  width: "42px",
+  height: "42px",
+  borderRadius: "50%",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  background: active
+    ? "#EAF5EF"
+    : "transparent",
+  fontSize: "20px",
+  transition: "0.2s",
+});
+
+const centerPost = {
+  display: "flex",
+  flexDirection: "column" as const,
+  alignItems: "center",
+  textDecoration: "none",
+  marginTop: "-30px",
 };
 
-const tabAvatar: React.CSSProperties = {
-  width: "24px",
-  height: "24px",
+const postCircle = {
+  width: "64px",
+  height: "64px",
   borderRadius: "50%",
+  background: "#1F3D2B",
+  color: "#fff",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: "34px",
+  fontWeight: "bold",
+  boxShadow:
+    "0 8px 24px rgba(31,61,43,0.25)",
+};
+
+const postText = {
+  marginTop: "6px",
+  fontSize: "11px",
+  color: "#1F3D2B",
+  fontWeight: "bold",
 };

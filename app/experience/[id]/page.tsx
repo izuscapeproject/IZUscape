@@ -1,3 +1,4 @@
+// app/experience/[id]/page.tsx
 "use client";
 
 import { useParams } from "next/navigation";
@@ -14,6 +15,7 @@ import {
   where,
   addDoc,
   deleteDoc,
+  deleteDoc as removeDoc,
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 
@@ -28,11 +30,12 @@ export default function Detail() {
   const [currentUser, setCurrentUser] = useState<string | null>(null);
   const [relatedPosts, setRelatedPosts] = useState<any[]>([]);
 
-  // 🔐 ログイン
+  // 🔐 ログイン状態取得
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user?.uid || null);
     });
+
     return () => unsub();
   }, []);
 
@@ -49,7 +52,10 @@ export default function Detail() {
       const snap = await getDocs(q);
 
       const found = snap.docs[0]
-        ? { id: snap.docs[0].id, ...snap.docs[0].data() }
+        ? {
+            id: snap.docs[0].id,
+            ...snap.docs[0].data(),
+          }
         : null;
 
       setPost(found);
@@ -58,7 +64,7 @@ export default function Detail() {
     fetchPost();
   }, [params.id]);
 
-  // 🔖 保存チェック
+  // 🔖 保存状態チェック
   useEffect(() => {
     if (!currentUser || !post) return;
 
@@ -76,7 +82,7 @@ export default function Detail() {
     checkSaved();
   }, [currentUser, post]);
 
-  // ❤️ 保存
+  // ❤️ 保存トグル
   const toggleSave = async () => {
     if (!currentUser) return alert("ログインして");
 
@@ -89,13 +95,17 @@ export default function Detail() {
     const snap = await getDocs(q);
 
     if (!snap.empty) {
-      snap.forEach(async (d) => await deleteDoc(d.ref));
+      snap.forEach(async (d) => {
+        await deleteDoc(d.ref);
+      });
+
       setIsSaved(false);
     } else {
       await addDoc(collection(db, "saved"), {
         userId: currentUser,
         postId: post.id,
       });
+
       setIsSaved(true);
     }
   };
@@ -113,7 +123,28 @@ export default function Detail() {
       reactions: newReactions,
     });
 
-    setPost({ ...post, reactions: newReactions });
+    setPost({
+      ...post,
+      reactions: newReactions,
+    });
+  };
+
+  // 🗑 投稿削除（自分の投稿のみ）
+  const handleDelete = async () => {
+    if (!post) return;
+
+    const ok = confirm("この投稿を削除しますか？");
+    if (!ok) return;
+
+    try {
+      await removeDoc(doc(db, "posts", post.id));
+
+      alert("投稿を削除しました");
+      window.location.href = "/";
+    } catch (error) {
+      console.error(error);
+      alert("削除に失敗しました");
+    }
   };
 
   // 🔥 関連投稿
@@ -122,16 +153,26 @@ export default function Detail() {
 
     const fetchRelated = async () => {
       const data = await getRelatedPosts(post.area);
-      const filtered = data.filter((p: any) => p.id !== post.id);
+
+      const filtered = data.filter(
+        (p: any) => p.id !== post.id
+      );
+
       setRelatedPosts(filtered);
     };
 
     fetchRelated();
   }, [post]);
 
-  if (!post) return <p style={{ padding: "20px" }}>読み込み中...</p>;
+  if (!post) {
+    return (
+      <p style={{ padding: "20px" }}>
+        読み込み中...
+      </p>
+    );
+  }
 
-  // 🔥 エリア変換
+  // エリア変換
   const areaMap: Record<string, string> = {
     shimoda: "下田市",
     atami: "熱海市",
@@ -148,21 +189,32 @@ export default function Detail() {
     numazu: "沼津市",
   };
 
+  const isOwner = currentUser === post.userId;
+
   return (
     <main style={container}>
       <Link href="/" style={back}>
         ← 戻る
       </Link>
 
-      {/* ヒーロー */}
-      <img src={post.images?.[0]} style={hero} />
+      {/* ヒーロー画像 */}
+      <img
+        src={post.images?.[0]}
+        alt={post.title}
+        style={hero}
+      />
 
       {/* タイトル */}
-      <h2 style={title}>{post.title}</h2>
+      <h2 style={title}>
+        {post.title}
+      </h2>
 
-      {/* エリア・ユーザー */}
+      {/* エリア・投稿者 */}
       <p style={meta}>
-        <Link href={`/area/${post.area}`} style={areaLink}>
+        <Link
+          href={`/area/${post.area}`}
+          style={areaLink}
+        >
           📍 {areaMap[post.area] || post.area}
         </Link>
         ・ {post.userName || "匿名"}
@@ -170,62 +222,131 @@ export default function Detail() {
 
       {/* タグ */}
       <div style={tags}>
-        {post.tags?.map((tag: string, i: number) => (
-          <Link key={i} href={`/tag/${encodeURIComponent(tag)}`}>
-            <span style={tagStyle}>#{tag}</span>
-          </Link>
-        ))}
+        {post.tags?.map(
+          (tag: string, i: number) => (
+            <Link
+              key={i}
+              href={`/tag/${encodeURIComponent(tag)}`}
+            >
+              <span style={tagStyle}>
+                #{tag}
+              </span>
+            </Link>
+          )
+        )}
       </div>
 
-      {/* 導入 */}
-      <p style={summary}>{post.contents?.[0]}</p>
-
-      <hr />
+      {/* 導入文 */}
+      <div style={summaryCard}>
+        <p style={summary}>
+          {post.contents?.[0]}
+        </p>
+      </div>
 
       {/* スポット */}
-      {post.images?.slice(1).map((img: string, i: number) => (
-        <div key={i} style={section}>
-          <h4 style={spotTitle}>
-            📍 {post.spotNames?.[i] || `スポット ${i + 1}`}
-          </h4>
+      {post.images
+        ?.slice(1)
+        .map((img: string, i: number) => (
+          <div key={i} style={spotCard}>
+            <h3 style={spotTitle}>
+              📍{" "}
+              {post.spotNames?.[i] ||
+                `スポット ${i + 1}`}
+            </h3>
 
-          <img src={img} style={imgStyle} />
+            <img
+              src={img}
+              alt={`spot-${i}`}
+              style={imgStyle}
+            />
 
-          <p style={text}>{post.contents?.[i + 1] || ""}</p>
-        </div>
-      ))}
+            <p style={text}>
+              {post.contents?.[i + 1] || ""}
+            </p>
+          </div>
+        ))}
 
       {/* ルート */}
       <div style={routeBox}>
-        <h3>🗺 ルート</h3>
-        <p>
+        <h3 style={routeTitle}>
+          🗺 ルート
+        </h3>
+
+        <p style={routeText}>
           {(post.spotNames || [])
-            .map((n: string) => n || "スポット")
+            .map(
+              (name: string) =>
+                name || "スポット"
+            )
             .join(" → ")}
         </p>
       </div>
 
       {/* アクション */}
       <div style={actionRow}>
-        <button onClick={toggleSave} style={saveBtn(isSaved)}>
-          {isSaved ? "❤️ 保存済み" : "🤍 保存"}
+        <button
+          onClick={toggleSave}
+          style={saveBtn(isSaved)}
+        >
+          {isSaved
+            ? "❤️ 保存済み"
+            : "🤍 保存"}
         </button>
 
-        <button onClick={() => handleReaction("want")} style={reactionBtn}>
-          行ってみたい {post.reactions?.want || 0}
+        <button
+          onClick={() =>
+            handleReaction("want")
+          }
+          style={reactionBtn}
+        >
+          行ってみたい{" "}
+          {post.reactions?.want || 0}
         </button>
 
-        <button onClick={() => handleReaction("same")} style={reactionBtn}>
-          同じ体験 {post.reactions?.same || 0}
+        <button
+          onClick={() =>
+            handleReaction("same")
+          }
+          style={reactionBtn}
+        >
+          同じ体験{" "}
+          {post.reactions?.same || 0}
         </button>
 
-        <button onClick={() => handleReaction("nice")} style={reactionBtn}>
-          👍 {post.reactions?.nice || 0}
+        <button
+          onClick={() =>
+            handleReaction("nice")
+          }
+          style={reactionBtn}
+        >
+          素敵{" "}
+          {post.reactions?.nice || 0}
         </button>
       </div>
 
-      {/* 関連 */}
-      <h3 style={{ marginTop: "30px" }}>こんなのもあるよ</h3>
+      {/* 自分の投稿のみ */}
+      {isOwner && (
+        <div style={ownerActions}>
+          <Link
+            href={`/edit/${post.id}`}
+            style={editBtn}
+          >
+            ✏️ 編集する
+          </Link>
+
+          <button
+            onClick={handleDelete}
+            style={deleteBtn}
+          >
+            🗑 削除する
+          </button>
+        </div>
+      )}
+
+      {/* 関連投稿 */}
+      <h3 style={relatedTitle}>
+        こんなのもあるよ
+      </h3>
 
       <div style={relatedRow}>
         {relatedPosts.map((p) => (
@@ -234,7 +355,8 @@ export default function Detail() {
             post={{
               id: p.id,
               title: p.title,
-              imageUrl: p.images?.[0] || "",
+              imageUrl:
+                p.images?.[0] || "",
               slug: p.slug,
             }}
           />
@@ -246,105 +368,175 @@ export default function Detail() {
 
 ////////////////////////////////////////////////
 
-// 🎨 スタイル（全部エラー対策済）
-
 const container = {
-  maxWidth: "600px",
+  maxWidth: "700px",
   margin: "0 auto",
   padding: "24px",
 };
 
 const back = {
-  color: "#555",
+  color: "#666",
   textDecoration: "none",
+  fontSize: "14px",
 };
 
 const hero = {
   width: "100%",
-  height: "240px",
+  height: "260px",
   objectFit: "cover" as const,
-  borderRadius: "16px",
+  borderRadius: "18px",
+  marginTop: "12px",
 };
 
 const title = {
-  fontSize: "20px",
-  marginTop: "10px",
+  fontSize: "24px",
+  fontWeight: "bold",
+  marginTop: "16px",
+  lineHeight: "1.4",
 };
 
 const meta = {
+  marginTop: "8px",
   fontSize: "14px",
 };
 
 const areaLink = {
   color: "#2E7D5A",
   textDecoration: "none",
+  fontWeight: "600",
 };
 
 const tags = {
   display: "flex",
-  gap: "8px",
   flexWrap: "wrap" as const,
+  gap: "8px",
+  marginTop: "14px",
 };
 
 const tagStyle = {
   background: "#E8F3EE",
-  padding: "4px 10px",
-  borderRadius: "999px",
   color: "#2E7D5A",
+  padding: "6px 12px",
+  borderRadius: "999px",
+  fontSize: "13px",
+  fontWeight: "500",
+};
+
+const summaryCard = {
+  marginTop: "24px",
+  background: "#ffffff",
+  borderRadius: "18px",
+  padding: "22px",
+  boxShadow: "0 4px 14px rgba(0,0,0,0.05)",
 };
 
 const summary = {
-  marginTop: "10px",
+  fontSize: "15px",
+  lineHeight: "1.9",
+  color: "#333",
 };
 
-const section = {
-  marginTop: "20px",
+const spotCard = {
+  marginTop: "24px",
+  background: "#ffffff",
+  borderRadius: "18px",
+  padding: "20px",
+  boxShadow: "0 4px 14px rgba(0,0,0,0.05)",
 };
 
 const spotTitle = {
-  fontSize: "14px",
+  fontSize: "18px",
+  fontWeight: "bold",
+  marginBottom: "14px",
 };
 
 const imgStyle = {
   width: "100%",
-  borderRadius: "12px",
+  borderRadius: "14px",
 };
 
 const text = {
-  fontSize: "14px",
+  marginTop: "14px",
+  fontSize: "15px",
+  lineHeight: "1.9",
+  color: "#333",
 };
 
 const routeBox = {
-  marginTop: "20px",
-  padding: "12px",
-  background: "#F0F7F4",
-  borderRadius: "10px",
+  marginTop: "28px",
+  background: "#F4FAF7",
+  borderRadius: "18px",
+  padding: "20px",
+};
+
+const routeTitle = {
+  fontSize: "18px",
+  fontWeight: "bold",
+};
+
+const routeText = {
+  marginTop: "10px",
+  lineHeight: "1.8",
 };
 
 const actionRow = {
   display: "flex",
-  gap: "10px",
   flexWrap: "wrap" as const,
+  gap: "12px",
+  marginTop: "28px",
 };
 
 const saveBtn = (active: boolean) => ({
-  flex: 1,
-  padding: "10px",
+  padding: "12px 18px",
   borderRadius: "999px",
+  border: "none",
   background: active ? "#2E7D5A" : "#eee",
   color: active ? "#fff" : "#333",
+  fontWeight: "bold",
 });
 
 const reactionBtn = {
-  flex: 1,
-  padding: "10px",
+  padding: "12px 18px",
   borderRadius: "999px",
+  border: "none",
   background: "#2E7D5A",
   color: "#fff",
+  fontWeight: "bold",
+};
+
+const ownerActions = {
+  display: "flex",
+  gap: "12px",
+  marginTop: "24px",
+};
+
+const editBtn = {
+  padding: "12px 18px",
+  borderRadius: "999px",
+  background: "#F0F7F4",
+  color: "#2E7D5A",
+  textDecoration: "none",
+  fontWeight: "bold",
+};
+
+const deleteBtn = {
+  padding: "12px 18px",
+  borderRadius: "999px",
+  border: "none",
+  background: "#FFEAEA",
+  color: "#D33",
+  fontWeight: "bold",
+};
+
+const relatedTitle = {
+  marginTop: "40px",
+  fontSize: "20px",
+  fontWeight: "bold",
 };
 
 const relatedRow = {
   display: "flex",
-  gap: "10px",
+  gap: "14px",
   overflowX: "auto" as const,
+  paddingTop: "12px",
 };

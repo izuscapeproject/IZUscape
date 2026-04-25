@@ -1,3 +1,4 @@
+// app/post/page.tsx
 "use client";
 
 import { useState } from "react";
@@ -15,12 +16,15 @@ export default function PostPage() {
   const [tags, setTags] = useState("");
   const [intro, setIntro] = useState("");
 
-  // 旧
+  // 投稿完了トースト
+  const [showToast, setShowToast] = useState(false);
+
+  // 旧投稿
   const [images, setImages] = useState<File[]>([]);
   const [preview, setPreview] = useState<string[]>([]);
   const [contents, setContents] = useState(["", "", ""]);
 
-  // 新
+  // スポット投稿
   const [spots, setSpots] = useState([
     { name: "", content: "", file: null as File | null, preview: "" },
     { name: "", content: "", file: null as File | null, preview: "" },
@@ -48,7 +52,7 @@ export default function PostPage() {
     { value: "numazu", label: "沼津市" },
   ];
 
-  // 🔥 旧画像
+  // 旧画像
   const handleImageChange = (e: any, index: number) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -62,13 +66,14 @@ export default function PostPage() {
     setPreview(newPreview);
   };
 
-  // 🔥 新スポット
+  // スポット変更
   const handleSpotChange = (index: number, key: string, value: any) => {
     const copy = [...spots];
     (copy[index] as any)[key] = value;
     setSpots(copy);
   };
 
+  // Cloudinary
   const uploadToCloudinary = async (file: File) => {
     const formData = new FormData();
     formData.append("file", file);
@@ -76,18 +81,22 @@ export default function PostPage() {
 
     const res = await fetch(
       `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
-      { method: "POST", body: formData }
+      {
+        method: "POST",
+        body: formData,
+      }
     );
 
     const data = await res.json();
     return data.secure_url;
   };
 
+  // 投稿
   const handlePost = async () => {
     if (!auth.currentUser) return alert("ログインして");
     if (!title) return alert("タイトル入力して");
 
-    if (images.length < 1 && spots.every(s => !s.file)) {
+    if (images.length < 1 && spots.every((s) => !s.file)) {
       return alert("画像を最低1枚入れて");
     }
 
@@ -128,7 +137,7 @@ export default function PostPage() {
         slug,
 
         images: imageUrls,
-        contents: [intro, ...contents, ...validSpots.map(s => s.content)],
+        contents: [intro, ...contents, ...validSpots.map((s) => s.content)],
         spotNames: validSpots.map((s) => s.name),
 
         tags: tagArray,
@@ -140,8 +149,12 @@ export default function PostPage() {
         createdAt: new Date(),
       });
 
-      alert("投稿完了🔥");
-      router.push("/");
+      // 🔥 alert → トースト表示
+      setShowToast(true);
+
+      setTimeout(() => {
+        router.push("/");
+      }, 1500);
     } catch (e) {
       console.error(e);
       alert("投稿失敗");
@@ -152,10 +165,21 @@ export default function PostPage() {
 
   return (
     <div style={container}>
+      {/* 投稿完了トースト */}
+      {showToast && (
+        <div style={toast}>
+          ✨ 投稿が公開されました！
+        </div>
+      )}
+
       <h2 style={titleStyle}>投稿する</h2>
 
       {/* エリア */}
-      <select value={area} onChange={(e) => setArea(e.target.value)} style={input}>
+      <select
+        value={area}
+        onChange={(e) => setArea(e.target.value)}
+        style={input}
+      >
         {areas.map((a) => (
           <option key={a.value} value={a.value}>
             {a.label}
@@ -187,12 +211,18 @@ export default function PostPage() {
         style={textarea}
       />
 
-      {/* 旧 */}
+      {/* シンプル投稿 */}
       <h3 style={sectionTitle}>シンプル投稿</h3>
+
       {[0, 1, 2].map((i) => (
         <div key={i}>
           {preview[i] && <img src={preview[i]} style={img} />}
-          <input type="file" onChange={(e) => handleImageChange(e, i)} />
+
+          <input
+            type="file"
+            onChange={(e) => handleImageChange(e, i)}
+          />
+
           <textarea
             value={contents[i]}
             onChange={(e) => {
@@ -205,8 +235,9 @@ export default function PostPage() {
         </div>
       ))}
 
-      {/* 新 */}
+      {/* スポット投稿 */}
       <h3 style={sectionTitle}>スポット投稿</h3>
+
       {spots.map((spot, i) => (
         <div key={i} style={spotBox}>
           <input
@@ -225,8 +256,13 @@ export default function PostPage() {
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (!file) return;
+
               handleSpotChange(i, "file", file);
-              handleSpotChange(i, "preview", URL.createObjectURL(file));
+              handleSpotChange(
+                i,
+                "preview",
+                URL.createObjectURL(file)
+              );
             }}
           />
 
@@ -249,8 +285,6 @@ export default function PostPage() {
 }
 
 ////////////////////////////////////////////////
-
-// 🎨 UI改善済スタイル
 
 const container = {
   maxWidth: "600px",
@@ -308,5 +342,19 @@ const btnPrimary = {
   color: "#fff",
   border: "none",
   borderRadius: "999px",
+  fontWeight: "bold",
+};
+
+const toast = {
+  position: "fixed" as const,
+  top: "20px",
+  left: "50%",
+  transform: "translateX(-50%)",
+  background: "#2E7D5A",
+  color: "#fff",
+  padding: "14px 24px",
+  borderRadius: "999px",
+  boxShadow: "0 6px 20px rgba(0,0,0,0.15)",
+  zIndex: 999,
   fontWeight: "bold",
 };
