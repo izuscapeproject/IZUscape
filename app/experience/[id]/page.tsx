@@ -1,6 +1,7 @@
+// app/experience/[id]/page.tsx
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
@@ -8,489 +9,627 @@ import { db, auth } from "@/lib/firebase";
 import {
   collection,
   getDocs,
+  getDoc,
   doc,
   updateDoc,
   query,
   where,
   addDoc,
   deleteDoc,
+  orderBy,
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 
-import PostCard from "@/app/components/PostCard";
-import { getRelatedPosts } from "@/lib/getRelatedPosts";
-
-export default function Detail() {
+export default function DetailPage() {
   const params = useParams();
-  const router = useRouter();
+
+  // undefined対策
+  const postId =
+    typeof params?.id === "string"
+      ? params.id
+      : Array.isArray(params?.id)
+      ? params.id[0]
+      : null;
 
   const [post, setPost] = useState<any>(null);
-  const [isSaved, setIsSaved] = useState(false);
-  const [currentUser, setCurrentUser] = useState<string | null>(null);
-  const [relatedPosts, setRelatedPosts] = useState<any[]>([]);
+  const [currentUser, setCurrentUser] =
+    useState<string | null>(null);
+  const [isSaved, setIsSaved] =
+    useState(false);
 
-  // ログイン状態取得
+  const [comments, setComments] =
+    useState<any[]>([]);
+  const [commentText, setCommentText] =
+    useState("");
+
+  //////////////////////////////////////////////////
+  // ログイン取得
+
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user?.uid || null);
-    });
+    const unsub =
+      onAuthStateChanged(auth, (user) => {
+        setCurrentUser(user?.uid || null);
+      });
 
     return () => unsub();
   }, []);
 
-  // 投稿取得（slug）
+  //////////////////////////////////////////////////
+  // 投稿取得
+
   useEffect(() => {
+    if (!postId) return;
+
     const fetchPost = async () => {
-      if (!params.id) return;
+      try {
+        // docID検索
+        const ref = doc(
+          db,
+          "posts",
+          String(postId)
+        );
 
-      const q = query(
-        collection(db, "posts"),
-        where("slug", "==", params.id)
-      );
+        const snap =
+          await getDoc(ref);
 
-      const snap = await getDocs(q);
+        if (snap.exists()) {
+          setPost({
+            id: snap.id,
+            ...snap.data(),
+          });
+          return;
+        }
 
-      const found = snap.docs[0]
-        ? {
-            id: snap.docs[0].id,
-            ...snap.docs[0].data(),
-          }
-        : null;
+        // slug検索
+        const q = query(
+          collection(db, "posts"),
+          where(
+            "slug",
+            "==",
+            String(postId)
+          )
+        );
 
-      setPost(found);
+        const slugSnap =
+          await getDocs(q);
+
+        if (!slugSnap.empty) {
+          setPost({
+            id: slugSnap.docs[0].id,
+            ...slugSnap.docs[0].data(),
+          });
+          return;
+        }
+
+        alert("投稿が見つかりません");
+      } catch (error) {
+        console.error(error);
+      }
     };
 
     fetchPost();
-  }, [params.id]);
+  }, [postId]);
 
-  // 保存状態チェック
+  //////////////////////////////////////////////////
+  // 保存状態確認
+
   useEffect(() => {
-    if (!currentUser || !post) return;
+    if (
+      !currentUser ||
+      !post ||
+      !post.id
+    )
+      return;
 
     const checkSaved = async () => {
       const q = query(
         collection(db, "saved"),
-        where("userId", "==", currentUser),
-        where("postId", "==", post.id)
+        where(
+          "userId",
+          "==",
+          String(currentUser)
+        ),
+        where(
+          "postId",
+          "==",
+          String(post.id)
+        )
       );
 
-      const snap = await getDocs(q);
+      const snap =
+        await getDocs(q);
+
       setIsSaved(!snap.empty);
     };
 
     checkSaved();
   }, [currentUser, post]);
 
-  // 保存トグル
+  //////////////////////////////////////////////////
+  // コメント取得
+
+  useEffect(() => {
+    if (!post || !post.id) return;
+
+    const fetchComments = async () => {
+      const q = query(
+        collection(db, "comments"),
+        where(
+          "postId",
+          "==",
+          String(post.id)
+        ),
+        orderBy(
+          "createdAt",
+          "desc"
+        )
+      );
+
+      const snap =
+        await getDocs(q);
+
+      const data = snap.docs.map(
+        (doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        })
+      );
+
+      setComments(data);
+    };
+
+    fetchComments();
+  }, [post]);
+
+  //////////////////////////////////////////////////
+  // 保存切替
+
   const toggleSave = async () => {
-    if (!currentUser) return alert("ログインして");
+    if (!currentUser)
+      return alert("ログインして");
+
+    if (!post || !post.id) return;
 
     const q = query(
       collection(db, "saved"),
-      where("userId", "==", currentUser),
-      where("postId", "==", post.id)
+      where(
+        "userId",
+        "==",
+        String(currentUser)
+      ),
+      where(
+        "postId",
+        "==",
+        String(post.id)
+      )
     );
 
-    const snap = await getDocs(q);
+    const snap =
+      await getDocs(q);
 
     if (!snap.empty) {
-      snap.forEach(async (d) => {
+      for (const d of snap.docs) {
         await deleteDoc(d.ref);
-      });
+      }
 
       setIsSaved(false);
     } else {
-      await addDoc(collection(db, "saved"), {
-        userId: currentUser,
-        postId: post.id,
-      });
+      await addDoc(
+        collection(db, "saved"),
+        {
+          userId: String(
+            currentUser
+          ),
+          postId: String(post.id),
+        }
+      );
 
       setIsSaved(true);
     }
   };
 
-  // リアクション
-  const handleReaction = async (type: string) => {
-    if (!post) return;
+  //////////////////////////////////////////////////
+  // リアクション（1人1回）
 
-    const newReactions = {
-      ...post.reactions,
-      [type]: (post.reactions?.[type] || 0) + 1,
-    };
+  const handleReaction = async (
+    type: string
+  ) => {
+    if (!currentUser) {
+      alert("ログインして");
+      return;
+    }
 
-    await updateDoc(doc(db, "posts", post.id), {
-      reactions: newReactions,
-    });
-
-    setPost({
-      ...post,
-      reactions: newReactions,
-    });
-  };
-
-  // 削除
-  const handleDelete = async () => {
-    const ok = confirm("この投稿を削除しますか？");
-
-    if (!ok) return;
+    if (!post || !post.id) return;
 
     try {
-      await deleteDoc(doc(db, "posts", post.id));
+      const q = query(
+        collection(db, "reactions"),
+        where(
+          "userId",
+          "==",
+          String(currentUser)
+        ),
+        where(
+          "postId",
+          "==",
+          String(post.id)
+        ),
+        where(
+          "type",
+          "==",
+          type
+        )
+      );
 
-      alert("投稿を削除しました");
-      router.push("/");
+      const snap =
+        await getDocs(q);
+
+      if (!snap.empty) {
+        alert(
+          "すでにリアクション済みです"
+        );
+        return;
+      }
+
+      await addDoc(
+        collection(db, "reactions"),
+        {
+          userId: String(
+            currentUser
+          ),
+          postId: String(post.id),
+          type,
+          createdAt: Date.now(),
+        }
+      );
+
+      const newReactions = {
+        ...post.reactions,
+        [type]:
+          (post.reactions?.[
+            type
+          ] || 0) + 1,
+      };
+
+      await updateDoc(
+        doc(db, "posts", post.id),
+        {
+          reactions:
+            newReactions,
+        }
+      );
+
+      setPost({
+        ...post,
+        reactions:
+          newReactions,
+      });
     } catch (error) {
       console.error(error);
-      alert("削除に失敗しました");
+      alert(
+        "リアクションに失敗しました"
+      );
     }
   };
 
-  // 関連投稿
-  useEffect(() => {
-    if (!post?.area) return;
+  //////////////////////////////////////////////////
+  // コメント送信
 
-    const fetchRelated = async () => {
-      const data = await getRelatedPosts(post.area);
-      const filtered = data.filter((p: any) => p.id !== post.id);
+  const handleCommentSubmit =
+    async () => {
+      if (!currentUser)
+        return alert(
+          "ログインして"
+        );
 
-      setRelatedPosts(filtered);
+      if (!post || !post.id)
+        return;
+
+      if (!commentText.trim())
+        return alert(
+          "コメントを入力して"
+        );
+
+      await addDoc(
+        collection(db, "comments"),
+        {
+          postId: String(post.id),
+          userId: String(
+            currentUser
+          ),
+          userName:
+            auth.currentUser
+              ?.displayName ||
+            "匿名",
+          text: commentText,
+          createdAt:
+            Date.now(),
+        }
+      );
+
+      setCommentText("");
+
+      const q = query(
+        collection(db, "comments"),
+        where(
+          "postId",
+          "==",
+          String(post.id)
+        ),
+        orderBy(
+          "createdAt",
+          "desc"
+        )
+      );
+
+      const snap =
+        await getDocs(q);
+
+      const data = snap.docs.map(
+        (doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        })
+      );
+
+      setComments(data);
     };
 
-    fetchRelated();
-  }, [post]);
+  //////////////////////////////////////////////////
+  // コメント削除
+
+  const handleDeleteComment =
+    async (id: string) => {
+      const ok = confirm(
+        "コメントを削除しますか？"
+      );
+
+      if (!ok) return;
+
+      await deleteDoc(
+        doc(db, "comments", id)
+      );
+
+      setComments((prev) =>
+        prev.filter(
+          (c) => c.id !== id
+        )
+      );
+    };
+
+  //////////////////////////////////////////////////
 
   if (!post) {
     return (
-      <p style={{ padding: "20px" }}>
+      <main
+        style={{
+          padding: "30px",
+        }}
+      >
         読み込み中...
-      </p>
+      </main>
     );
   }
 
-  // 自分の投稿か判定
-  const isOwner = currentUser === post.userId;
-
-  const areaMap: Record<string, string> = {
-    shimoda: "下田市",
-    atami: "熱海市",
-    ito: "伊東市",
-    izu: "伊豆市",
-    izunokuni: "伊豆の国市",
-    higashiizu: "東伊豆町",
-    kawazu: "河津町",
-    minamiizu: "南伊豆町",
-    matsuzaki: "松崎町",
-    nishiizu: "西伊豆町",
-    kannami: "函南町",
-    mishima: "三島市",
-    numazu: "沼津市",
-  };
-
   return (
     <main style={container}>
-      <Link href="/" style={back}>
+      <Link
+        href="/"
+        style={back}
+      >
         ← 戻る
       </Link>
 
-      {/* ヒーロー */}
       <img
-        src={post.images?.[0]}
-        style={hero}
+        src={
+          post.images?.[0] ||
+          "/noimage.png"
+        }
+        alt={post.title}
+        style={heroImage}
       />
 
-      {/* タイトル */}
-      <h2 style={title}>
+      <h1 style={title}>
         {post.title}
-      </h2>
+      </h1>
 
-      {/* エリア・ユーザー */}
-      <p style={meta}>
+      {/* スポット表示 */}
+      <p style={spotText}>
         📍{" "}
-        {areaMap[post.area] || post.area}
-        ・{" "}
-        {post.userName || "匿名"}
+        {post.spot ||
+          post.place ||
+          post.location ||
+          post.spotNames?.[0] ||
+          "スポット未設定"}
       </p>
 
-      {/* タグ */}
-      <div style={tags}>
-        {post.tags?.map(
-          (tag: string, i: number) => (
-            <span
-              key={i}
-              style={tagStyle}
+      <p style={userName}>
+        投稿者：
+        {post.userName ||
+          "匿名"}
+      </p>
+
+      <p style={description}>
+        {post.description ||
+          post.contents?.[0] ||
+          "説明なし"}
+      </p>
+
+      <button
+        onClick={toggleSave}
+        style={saveBtn}
+      >
+        {isSaved
+          ? "❤️ 保存済み"
+          : "🤍 保存する"}
+      </button>
+
+      <div style={reactionBox}>
+        <button
+          onClick={() =>
+            handleReaction(
+              "like"
+            )
+          }
+        >
+          👍{" "}
+          {post.reactions
+            ?.like || 0}
+        </button>
+
+        <button
+          onClick={() =>
+            handleReaction(
+              "want"
+            )
+          }
+        >
+          行きたい{" "}
+          {post.reactions
+            ?.want || 0}
+        </button>
+
+        <button
+          onClick={() =>
+            handleReaction(
+              "amazing"
+            )
+          }
+        >
+          すごい{" "}
+          {post.reactions
+            ?.amazing || 0}
+        </button>
+      </div>
+
+      <div style={commentBox}>
+        <h2>コメント</h2>
+
+        <textarea
+          value={commentText}
+          onChange={(e) =>
+            setCommentText(
+              e.target.value
+            )
+          }
+          style={textarea}
+          placeholder="コメントを書く"
+        />
+
+        <button
+          onClick={
+            handleCommentSubmit
+          }
+          style={commentBtn}
+        >
+          コメントする
+        </button>
+
+        {comments.map(
+          (comment) => (
+            <div
+              key={comment.id}
+              style={commentCard}
             >
-              #{tag}
-            </span>
+              <strong>
+                {comment.userName ||
+                  "匿名"}
+              </strong>
+
+              <p>
+                {comment.text}
+              </p>
+
+              {currentUser ===
+                comment.userId && (
+                <button
+                  onClick={() =>
+                    handleDeleteComment(
+                      comment.id
+                    )
+                  }
+                >
+                  削除
+                </button>
+              )}
+            </div>
           )
         )}
-      </div>
-
-      {/* 導入 */}
-      <p style={summary}>
-        {post.contents?.[0]}
-      </p>
-
-      <hr />
-
-      {/* スポット */}
-      {post.images
-        ?.slice(1)
-        .map((img: string, i: number) => (
-          <div
-            key={i}
-            style={section}
-          >
-            <h4 style={spotTitle}>
-              📍{" "}
-              {post.spotNames?.[i] ||
-                `スポット ${i + 1}`}
-            </h4>
-
-            <img
-              src={img}
-              style={imgStyle}
-            />
-
-            <p style={text}>
-              {post.contents?.[i + 1] ||
-                ""}
-            </p>
-          </div>
-        ))}
-
-      {/* ルート */}
-      <div style={routeBox}>
-        <h3>🗺 ルート</h3>
-        <p>
-          {(post.spotNames || [])
-            .map(
-              (n: string) =>
-                n || "スポット"
-            )
-            .join(" → ")}
-        </p>
-      </div>
-
-      {/* アクション */}
-      <div style={actionRow}>
-        <button
-          onClick={toggleSave}
-          style={saveBtn(isSaved)}
-        >
-          {isSaved
-            ? "❤️ 保存済み"
-            : "🤍 保存"}
-        </button>
-
-        <button
-          onClick={() =>
-            handleReaction("want")
-          }
-          style={reactionBtn}
-        >
-          行ってみたい{" "}
-          {post.reactions?.want || 0}
-        </button>
-
-        <button
-          onClick={() =>
-            handleReaction("same")
-          }
-          style={reactionBtn}
-        >
-          同じ体験{" "}
-          {post.reactions?.same || 0}
-        </button>
-
-        <button
-          onClick={() =>
-            handleReaction("nice")
-          }
-          style={reactionBtn}
-        >
-          素敵{" "}
-          {post.reactions?.nice || 0}
-        </button>
-      </div>
-
-      {/* 自分の投稿だけ */}
-      {isOwner && (
-        <div style={ownerActions}>
-          <Link
-            href={`/edit/${post.id}`}
-            style={editBtn}
-          >
-            ✏️ 編集する
-          </Link>
-
-          <button
-            onClick={handleDelete}
-            style={deleteBtn}
-          >
-            🗑 削除する
-          </button>
-        </div>
-      )}
-
-      {/* 関連投稿 */}
-      <h3 style={relatedTitle}>
-        こんなのもあるよ
-      </h3>
-
-      <div style={relatedRow}>
-        {relatedPosts.map((p) => (
-          <PostCard
-            key={p.id}
-            post={{
-              id: p.id,
-              title: p.title,
-              imageUrl:
-                p.images?.[0] || "",
-              slug: p.slug,
-            }}
-          />
-        ))}
       </div>
     </main>
   );
 }
 
-////////////////////////////////////////////////
+//////////////////////////////////////////////////
+// style
 
 const container = {
-  maxWidth: "700px",
+  maxWidth: "800px",
   margin: "0 auto",
-  padding: "24px",
+  padding: "20px",
 };
 
 const back = {
-  color: "#666",
   textDecoration: "none",
+  color: "#555",
 };
 
-const hero = {
+const heroImage = {
   width: "100%",
-  height: "260px",
+  height: "300px",
   objectFit: "cover" as const,
-  borderRadius: "18px",
-  marginTop: "12px",
+  borderRadius: "20px",
+  marginTop: "20px",
 };
 
 const title = {
+  marginTop: "20px",
   fontSize: "28px",
   fontWeight: "bold",
-  marginTop: "18px",
 };
 
-const meta = {
+const spotText = {
+  marginTop: "10px",
+  fontSize: "15px",
   color: "#666",
-  marginTop: "8px",
 };
 
-const tags = {
-  display: "flex",
-  gap: "10px",
-  flexWrap: "wrap" as const,
-  marginTop: "16px",
+const userName = {
+  marginTop: "10px",
+  color: "#666",
 };
 
-const tagStyle = {
-  background: "#EEF7F1",
-  padding: "6px 12px",
-  borderRadius: "999px",
-  fontSize: "13px",
-};
-
-const summary = {
+const description = {
   marginTop: "20px",
   lineHeight: 1.8,
 };
 
-const section = {
-  marginTop: "30px",
+const saveBtn = {
+  marginTop: "20px",
 };
 
-const spotTitle = {
-  fontSize: "18px",
-  fontWeight: "bold",
-};
-
-const imgStyle = {
-  width: "100%",
-  borderRadius: "14px",
-  marginTop: "10px",
-};
-
-const text = {
-  marginTop: "14px",
-  lineHeight: 1.8,
-};
-
-const routeBox = {
-  marginTop: "30px",
-  padding: "20px",
-  background: "#F7FAF8",
-  borderRadius: "16px",
-};
-
-const actionRow = {
+const reactionBox = {
   display: "flex",
   gap: "10px",
-  flexWrap: "wrap" as const,
-  marginTop: "30px",
+  marginTop: "20px",
 };
 
-const saveBtn = (saved: boolean) => ({
-  padding: "12px 18px",
-  borderRadius: "999px",
-  border: "none",
-  background: saved
-    ? "#1F3D2B"
-    : "#EAF5EF",
-  color: saved ? "#fff" : "#1F3D2B",
-  cursor: "pointer",
-});
-
-const reactionBtn = {
-  padding: "12px 18px",
-  borderRadius: "999px",
-  border: "none",
-  background: "#F3F5F4",
-  cursor: "pointer",
-};
-
-const ownerActions = {
-  display: "flex",
-  gap: "12px",
-  marginTop: "30px",
-};
-
-const editBtn = {
-  padding: "14px 20px",
-  background: "#2E7D5A",
-  color: "#fff",
-  borderRadius: "999px",
-  textDecoration: "none",
-  fontWeight: "bold",
-};
-
-const deleteBtn = {
-  padding: "14px 20px",
-  background: "#fff0f0",
-  color: "#d33",
-  border: "none",
-  borderRadius: "999px",
-  fontWeight: "bold",
-  cursor: "pointer",
-};
-
-const relatedTitle = {
+const commentBox = {
   marginTop: "40px",
 };
 
-const relatedRow = {
-  display: "flex",
-  gap: "14px",
-  overflowX: "auto" as const,
-  marginTop: "16px",
+const textarea = {
+  width: "100%",
+  minHeight: "100px",
+};
+
+const commentBtn = {
+  marginTop: "10px",
+};
+
+const commentCard = {
+  marginTop: "20px",
+  padding: "15px",
+  border: "1px solid #ddd",
+  borderRadius: "12px",
 };
