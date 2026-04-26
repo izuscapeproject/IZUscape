@@ -1,7 +1,6 @@
-// app/experience/[id]/page.tsx
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
@@ -15,7 +14,6 @@ import {
   where,
   addDoc,
   deleteDoc,
-  deleteDoc as removeDoc,
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 
@@ -24,13 +22,14 @@ import { getRelatedPosts } from "@/lib/getRelatedPosts";
 
 export default function Detail() {
   const params = useParams();
+  const router = useRouter();
 
   const [post, setPost] = useState<any>(null);
   const [isSaved, setIsSaved] = useState(false);
   const [currentUser, setCurrentUser] = useState<string | null>(null);
   const [relatedPosts, setRelatedPosts] = useState<any[]>([]);
 
-  // 🔐 ログイン状態取得
+  // ログイン状態取得
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user?.uid || null);
@@ -39,7 +38,7 @@ export default function Detail() {
     return () => unsub();
   }, []);
 
-  // 🔥 投稿取得（slug）
+  // 投稿取得（slug）
   useEffect(() => {
     const fetchPost = async () => {
       if (!params.id) return;
@@ -64,7 +63,7 @@ export default function Detail() {
     fetchPost();
   }, [params.id]);
 
-  // 🔖 保存状態チェック
+  // 保存状態チェック
   useEffect(() => {
     if (!currentUser || !post) return;
 
@@ -82,7 +81,7 @@ export default function Detail() {
     checkSaved();
   }, [currentUser, post]);
 
-  // ❤️ 保存トグル
+  // 保存トグル
   const toggleSave = async () => {
     if (!currentUser) return alert("ログインして");
 
@@ -110,7 +109,7 @@ export default function Detail() {
     }
   };
 
-  // 👍 リアクション
+  // リアクション
   const handleReaction = async (type: string) => {
     if (!post) return;
 
@@ -129,34 +128,30 @@ export default function Detail() {
     });
   };
 
-  // 🗑 投稿削除（自分の投稿のみ）
+  // 削除
   const handleDelete = async () => {
-    if (!post) return;
-
     const ok = confirm("この投稿を削除しますか？");
+
     if (!ok) return;
 
     try {
-      await removeDoc(doc(db, "posts", post.id));
+      await deleteDoc(doc(db, "posts", post.id));
 
       alert("投稿を削除しました");
-      window.location.href = "/";
+      router.push("/");
     } catch (error) {
       console.error(error);
       alert("削除に失敗しました");
     }
   };
 
-  // 🔥 関連投稿
+  // 関連投稿
   useEffect(() => {
     if (!post?.area) return;
 
     const fetchRelated = async () => {
       const data = await getRelatedPosts(post.area);
-
-      const filtered = data.filter(
-        (p: any) => p.id !== post.id
-      );
+      const filtered = data.filter((p: any) => p.id !== post.id);
 
       setRelatedPosts(filtered);
     };
@@ -172,7 +167,9 @@ export default function Detail() {
     );
   }
 
-  // エリア変換
+  // 自分の投稿か判定
+  const isOwner = currentUser === post.userId;
+
   const areaMap: Record<string, string> = {
     shimoda: "下田市",
     atami: "熱海市",
@@ -189,18 +186,15 @@ export default function Detail() {
     numazu: "沼津市",
   };
 
-  const isOwner = currentUser === post.userId;
-
   return (
     <main style={container}>
       <Link href="/" style={back}>
         ← 戻る
       </Link>
 
-      {/* ヒーロー画像 */}
+      {/* ヒーロー */}
       <img
         src={post.images?.[0]}
-        alt={post.title}
         style={hero}
       />
 
@@ -209,74 +203,69 @@ export default function Detail() {
         {post.title}
       </h2>
 
-      {/* エリア・投稿者 */}
+      {/* エリア・ユーザー */}
       <p style={meta}>
-        <Link
-          href={`/area/${post.area}`}
-          style={areaLink}
-        >
-          📍 {areaMap[post.area] || post.area}
-        </Link>
-        ・ {post.userName || "匿名"}
+        📍{" "}
+        {areaMap[post.area] || post.area}
+        ・{" "}
+        {post.userName || "匿名"}
       </p>
 
       {/* タグ */}
       <div style={tags}>
         {post.tags?.map(
           (tag: string, i: number) => (
-            <Link
+            <span
               key={i}
-              href={`/tag/${encodeURIComponent(tag)}`}
+              style={tagStyle}
             >
-              <span style={tagStyle}>
-                #{tag}
-              </span>
-            </Link>
+              #{tag}
+            </span>
           )
         )}
       </div>
 
-      {/* 導入文 */}
-      <div style={summaryCard}>
-        <p style={summary}>
-          {post.contents?.[0]}
-        </p>
-      </div>
+      {/* 導入 */}
+      <p style={summary}>
+        {post.contents?.[0]}
+      </p>
+
+      <hr />
 
       {/* スポット */}
       {post.images
         ?.slice(1)
         .map((img: string, i: number) => (
-          <div key={i} style={spotCard}>
-            <h3 style={spotTitle}>
+          <div
+            key={i}
+            style={section}
+          >
+            <h4 style={spotTitle}>
               📍{" "}
               {post.spotNames?.[i] ||
                 `スポット ${i + 1}`}
-            </h3>
+            </h4>
 
             <img
               src={img}
-              alt={`spot-${i}`}
               style={imgStyle}
             />
 
             <p style={text}>
-              {post.contents?.[i + 1] || ""}
+              {post.contents?.[i + 1] ||
+                ""}
             </p>
           </div>
         ))}
 
       {/* ルート */}
       <div style={routeBox}>
-        <h3 style={routeTitle}>
-          🗺 ルート
-        </h3>
-
-        <p style={routeText}>
+        <h3>🗺 ルート</h3>
+        <p>
           {(post.spotNames || [])
             .map(
-              (name: string) =>
-                name || "スポット"
+              (n: string) =>
+                n || "スポット"
             )
             .join(" → ")}
         </p>
@@ -324,7 +313,7 @@ export default function Detail() {
         </button>
       </div>
 
-      {/* 自分の投稿のみ */}
+      {/* 自分の投稿だけ */}
       {isOwner && (
         <div style={ownerActions}>
           <Link
@@ -377,7 +366,6 @@ const container = {
 const back = {
   color: "#666",
   textDecoration: "none",
-  fontSize: "14px",
 };
 
 const hero = {
@@ -389,154 +377,120 @@ const hero = {
 };
 
 const title = {
-  fontSize: "24px",
+  fontSize: "28px",
   fontWeight: "bold",
-  marginTop: "16px",
-  lineHeight: "1.4",
+  marginTop: "18px",
 };
 
 const meta = {
+  color: "#666",
   marginTop: "8px",
-  fontSize: "14px",
-};
-
-const areaLink = {
-  color: "#2E7D5A",
-  textDecoration: "none",
-  fontWeight: "600",
 };
 
 const tags = {
   display: "flex",
+  gap: "10px",
   flexWrap: "wrap" as const,
-  gap: "8px",
-  marginTop: "14px",
+  marginTop: "16px",
 };
 
 const tagStyle = {
-  background: "#E8F3EE",
-  color: "#2E7D5A",
+  background: "#EEF7F1",
   padding: "6px 12px",
   borderRadius: "999px",
   fontSize: "13px",
-  fontWeight: "500",
-};
-
-const summaryCard = {
-  marginTop: "24px",
-  background: "#ffffff",
-  borderRadius: "18px",
-  padding: "22px",
-  boxShadow: "0 4px 14px rgba(0,0,0,0.05)",
 };
 
 const summary = {
-  fontSize: "15px",
-  lineHeight: "1.9",
-  color: "#333",
+  marginTop: "20px",
+  lineHeight: 1.8,
 };
 
-const spotCard = {
-  marginTop: "24px",
-  background: "#ffffff",
-  borderRadius: "18px",
-  padding: "20px",
-  boxShadow: "0 4px 14px rgba(0,0,0,0.05)",
+const section = {
+  marginTop: "30px",
 };
 
 const spotTitle = {
   fontSize: "18px",
   fontWeight: "bold",
-  marginBottom: "14px",
 };
 
 const imgStyle = {
   width: "100%",
   borderRadius: "14px",
+  marginTop: "10px",
 };
 
 const text = {
   marginTop: "14px",
-  fontSize: "15px",
-  lineHeight: "1.9",
-  color: "#333",
+  lineHeight: 1.8,
 };
 
 const routeBox = {
-  marginTop: "28px",
-  background: "#F4FAF7",
-  borderRadius: "18px",
+  marginTop: "30px",
   padding: "20px",
-};
-
-const routeTitle = {
-  fontSize: "18px",
-  fontWeight: "bold",
-};
-
-const routeText = {
-  marginTop: "10px",
-  lineHeight: "1.8",
+  background: "#F7FAF8",
+  borderRadius: "16px",
 };
 
 const actionRow = {
   display: "flex",
+  gap: "10px",
   flexWrap: "wrap" as const,
-  gap: "12px",
-  marginTop: "28px",
+  marginTop: "30px",
 };
 
-const saveBtn = (active: boolean) => ({
+const saveBtn = (saved: boolean) => ({
   padding: "12px 18px",
   borderRadius: "999px",
   border: "none",
-  background: active ? "#2E7D5A" : "#eee",
-  color: active ? "#fff" : "#333",
-  fontWeight: "bold",
+  background: saved
+    ? "#1F3D2B"
+    : "#EAF5EF",
+  color: saved ? "#fff" : "#1F3D2B",
+  cursor: "pointer",
 });
 
 const reactionBtn = {
   padding: "12px 18px",
   borderRadius: "999px",
   border: "none",
-  background: "#2E7D5A",
-  color: "#fff",
-  fontWeight: "bold",
+  background: "#F3F5F4",
+  cursor: "pointer",
 };
 
 const ownerActions = {
   display: "flex",
   gap: "12px",
-  marginTop: "24px",
+  marginTop: "30px",
 };
 
 const editBtn = {
-  padding: "12px 18px",
+  padding: "14px 20px",
+  background: "#2E7D5A",
+  color: "#fff",
   borderRadius: "999px",
-  background: "#F0F7F4",
-  color: "#2E7D5A",
   textDecoration: "none",
   fontWeight: "bold",
 };
 
 const deleteBtn = {
-  padding: "12px 18px",
-  borderRadius: "999px",
+  padding: "14px 20px",
+  background: "#fff0f0",
+  color: "#d33",
   border: "none",
-  background: "#FFEAEA",
-  color: "#D33",
+  borderRadius: "999px",
   fontWeight: "bold",
+  cursor: "pointer",
 };
 
 const relatedTitle = {
   marginTop: "40px",
-  fontSize: "20px",
-  fontWeight: "bold",
 };
 
 const relatedRow = {
   display: "flex",
   gap: "14px",
   overflowX: "auto" as const,
-  paddingTop: "12px",
+  marginTop: "16px",
 };

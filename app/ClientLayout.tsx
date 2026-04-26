@@ -4,16 +4,11 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { auth, db } from "@/lib/firebase";
+import { auth } from "@/lib/firebase";
 import {
   onAuthStateChanged,
   signOut,
 } from "firebase/auth";
-
-import {
-  doc,
-  getDoc,
-} from "firebase/firestore";
 
 export default function ClientLayout({
   children,
@@ -27,36 +22,19 @@ export default function ClientLayout({
   const [profileImage, setProfileImage] =
     useState("");
 
-  // ログイン状態取得 + プロフィール画像取得
+  // ログイン状態取得
+  // 🔥 Firebase Auth の photoURL を使う
   useEffect(() => {
     const unsubscribe =
       onAuthStateChanged(
         auth,
-        async (currentUser) => {
+        (currentUser) => {
           setUser(currentUser);
 
           if (currentUser) {
-            try {
-              const ref = doc(
-                db,
-                "users",
-                currentUser.uid
-              );
-
-              const snap =
-                await getDoc(ref);
-
-              if (snap.exists()) {
-                const data: any =
-                  snap.data();
-
-                setProfileImage(
-                  data.photoURL || ""
-                );
-              }
-            } catch (error) {
-              console.error(error);
-            }
+            setProfileImage(
+              currentUser.photoURL || ""
+            );
           } else {
             setProfileImage("");
           }
