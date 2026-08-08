@@ -1115,3 +1115,474 @@ img {
 ::-webkit-scrollbar-thumb:hover {
   background: #bdc9c1;
 }
+/* =========================================================
+   IZUscape HEADER
+========================================================= */
+
+.izu-header {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+
+  background: rgba(255, 255, 255, 0.88);
+
+  border-bottom:
+    1px solid
+    rgba(227, 232, 228, 0.75);
+
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.izu-header-inner {
+  width: min(1200px, calc(100% - 48px));
+
+  min-height: 76px;
+
+  margin: 0 auto;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 30px;
+}
+
+
+/* =========================================================
+   LOGO
+========================================================= */
+
+.izu-logo {
+  display: flex;
+  flex-direction: column;
+
+  gap: 2px;
+
+  flex-shrink: 0;
+}
+
+.izu-logo-main {
+  color: var(--izu-green);
+
+  font-size: 21px;
+  font-weight: 750;
+
+  letter-spacing: -0.035em;
+}
+
+.izu-logo-sub {
+  color: #9aa39e;
+
+  font-size: 8px;
+  font-weight: 600;
+
+  letter-spacing: 0.12em;
+}
+
+
+/* =========================================================
+   DESKTOP NAV
+========================================================= */
+
+.izu-header-nav {
+  display: flex;
+  align-items: center;
+
+  gap: 26px;
+}
+
+.izu-header-nav > a:not(
+  .izu-record-link
+):not(
+  .izu-login-link
+) {
+  position: relative;
+
+  padding:
+    8px
+    0;
+
+  color: #69746e;
+
+  font-size: 12px;
+  font-weight: 600;
+
+  transition:
+    color 0.2s;
+}
+
+.izu-header-nav > a:not(
+  .izu-record-link
+):not(
+  .izu-login-link
+):hover,
+.izu-header-nav > a.active {
+  color: var(--izu-green);
+}
+
+.izu-header-nav > a.active::after {
+  content: "";
+
+  position: absolute;
+
+  left: 50%;
+  bottom: 1px;
+
+  width: 4px;
+  height: 4px;
+
+  transform: translateX(-50%);
+
+  border-radius: 50%;
+
+  background: var(--izu-green);
+}
+
+
+/* =========================================================
+   RECORD BUTTON
+========================================================= */
+
+.izu-record-link {
+  display: inline-flex;
+  align-items: center;
+
+  gap: 9px;
+
+  padding:
+    10px
+    15px;
+
+  border-radius: 999px;
+
+  background: var(--izu-green);
+
+  color: white;
+
+  font-size: 11px;
+  font-weight: 700;
+
+  box-shadow:
+    0 7px 18px
+    rgba(23, 63, 43, 0.14);
+
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
+}
+
+.izu-record-link:hover {
+  transform: translateY(-1px);
+
+  box-shadow:
+    0 10px 22px
+    rgba(23, 63, 43, 0.2);
+}
+
+.izu-record-arrow {
+  font-size: 14px;
+}
+
+
+/* =========================================================
+   LOGIN
+========================================================= */
+
+.izu-login-link {
+  display: inline-flex;
+  align-items: center;
+
+  padding:
+    9px
+    15px;
+
+  border:
+    1px solid
+    #dce4df;
+
+  border-radius: 999px;
+
+  color: var(--izu-green);
+
+  font-size: 11px;
+  font-weight: 700;
+
+  transition:
+    background 0.2s;
+}
+
+.izu-login-link:hover {
+  background: var(--izu-green-light);
+}
+
+
+/* =========================================================
+   PROFILE
+========================================================= */
+
+.izu-header-profile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 36px;
+  height: 36px;
+
+  overflow: hidden;
+
+  border:
+    1px solid
+    #dfe7e2;
+
+  border-radius: 50%;
+
+  background:
+    var(--izu-green-soft);
+
+  color: var(--izu-green);
+
+  transition:
+    transform 0.2s;
+}
+
+.izu-header-profile:hover {
+  transform: scale(1.05);
+}
+
+.izu-header-profile img {
+  width: 100%;
+  height: 100%;
+
+  object-fit: cover;
+}
+
+.izu-header-profile span {
+  font-size: 16px;
+}
+
+
+/* =========================================================
+   MOBILE BUTTON
+========================================================= */
+
+.izu-menu-button {
+  display: none;
+
+  position: relative;
+
+  width: 42px;
+  height: 42px;
+
+  padding: 0;
+
+  border: none;
+  border-radius: 50%;
+
+  background:
+    var(--izu-green-soft);
+
+  cursor: pointer;
+}
+
+.izu-menu-button span {
+  position: absolute;
+
+  left: 12px;
+
+  width: 18px;
+  height: 1.5px;
+
+  background: var(--izu-green);
+
+  transition:
+    transform 0.25s,
+    top 0.25s;
+}
+
+.izu-menu-button span:first-child {
+  top: 16px;
+}
+
+.izu-menu-button span:last-child {
+  top: 24px;
+}
+
+.izu-menu-button.open span:first-child {
+  top: 20px;
+
+  transform: rotate(45deg);
+}
+
+.izu-menu-button.open span:last-child {
+  top: 20px;
+
+  transform: rotate(-45deg);
+}
+
+
+/* =========================================================
+   MOBILE MENU
+========================================================= */
+
+.izu-mobile-menu {
+  display: none;
+}
+
+.izu-mobile-menu-inner {
+  width: min(
+    680px,
+    calc(100% - 40px)
+  );
+
+  margin: 0 auto;
+
+  padding:
+    32px
+    0
+    42px;
+}
+
+.izu-mobile-kicker {
+  margin: 0 0 18px;
+
+  color: #929d97;
+
+  font-size: 9px;
+  font-weight: 700;
+
+  letter-spacing: 0.18em;
+}
+
+.izu-mobile-nav {
+  display: flex;
+  flex-direction: column;
+}
+
+.izu-mobile-nav > a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  padding:
+    18px
+    0;
+
+  border-bottom:
+    1px solid
+    #edf0ee;
+
+  color: var(--izu-ink);
+
+  font-size: 17px;
+  font-weight: 650;
+}
+
+.izu-mobile-nav > a span:last-child {
+  color: #9aa49e;
+
+  font-size: 18px;
+}
+
+.izu-mobile-nav > a.primary {
+  margin-top: 4px;
+  padding:
+    17px
+    20px;
+
+  border: none;
+  border-radius: 15px;
+
+  background: var(--izu-green);
+
+  color: white;
+
+  box-shadow:
+    0 10px 25px
+    rgba(23, 63, 43, 0.15);
+}
+
+.izu-mobile-divider {
+  height: 18px;
+}
+
+.izu-mobile-logout {
+  margin-top: 28px;
+
+  padding: 10px 0;
+
+  border: none;
+
+  background: transparent;
+
+  color: #9a625d;
+
+  text-align: left;
+
+  font-size: 12px;
+
+  cursor: pointer;
+}
+
+.izu-mobile-caption {
+  margin:
+    40px
+    0
+    0;
+
+  color: #9ba49f;
+
+  font-size: 11px;
+  line-height: 1.8;
+}
+
+
+/* =========================================================
+   MAIN
+========================================================= */
+
+.izu-main {
+  min-height: 100vh;
+}
+
+
+/* =========================================================
+   MOBILE HEADER
+========================================================= */
+
+@media (max-width: 720px) {
+
+  .izu-header-inner {
+    width:
+      calc(100% - 32px);
+
+    min-height: 64px;
+  }
+
+  .izu-header-nav {
+    display: none;
+  }
+
+  .izu-menu-button {
+    display: block;
+  }
+
+  .izu-mobile-menu.open {
+    display: block;
+
+    background:
+      rgba(255, 255, 255, 0.98);
+
+    border-top:
+      1px solid
+      #edf0ee;
+  }
+
+  .izu-logo-main {
+    font-size: 19px;
+  }
+
+  .izu-logo-sub {
+    font-size: 7px;
+  }
+}

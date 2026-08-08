@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 
 import { db, auth } from "@/lib/firebase";
 import {
@@ -61,11 +60,10 @@ const QUICK_TAGS = [
 ];
 
 export default function Home() {
-  const router = useRouter();
-
   const [posts, setPosts] = useState<Post[]>([]);
   const [keyword, setKeyword] = useState("");
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
   const [mode, setMode] =
     useState<"all" | "follow">("all");
@@ -102,10 +100,37 @@ export default function Home() {
   // -----------------------------------------
 
   useEffect(() => {
+    let cancelled = false;
+
     const fetchPosts = async () => {
+      setLoading(true);
+      setLoadError("");
+
       try {
-        const snapshot = await getDocs(
-          collection(db, "posts")
+        console.log("[IZUscape] posts取得開始");
+
+        // Firestoreの通信が長時間終わらない場合でも、
+        // ホーム画面が永久に読み込み中にならないようにする。
+        const timeout = new Promise<never>((_, reject) => {
+          window.setTimeout(() => {
+            reject(
+              new Error(
+                "投稿の取得が10秒以内に完了しませんでした。"
+              )
+            );
+          }, 10000);
+        });
+
+        const snapshot = await Promise.race([
+          getDocs(collection(db, "posts")),
+          timeout,
+        ]);
+
+        if (cancelled) return;
+
+        console.log(
+          "[IZUscape] posts取得完了:",
+          snapshot.size
         );
 
         const data = snapshot.docs.map((doc) => ({
@@ -119,18 +144,35 @@ export default function Home() {
           setRandomPost(
             data[Math.floor(Math.random() * data.length)]
           );
+        } else {
+          setRandomPost(null);
         }
       } catch (error) {
+        if (cancelled) return;
+
         console.error(
-          "投稿の取得に失敗しました",
+          "[IZUscape] 投稿の取得に失敗しました:",
           error
         );
+
+        setPosts([]);
+        setRandomPost(null);
+
+        setLoadError(
+          "旅の記録を読み込めませんでした。ネットワーク接続やFirebaseの設定を確認してください。"
+        );
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
     fetchPosts();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // -----------------------------------------
@@ -653,6 +695,29 @@ export default function Home() {
             <p>
               旅の記憶を集めています…
             </p>
+          </div>
+        ) : loadError ? (
+          <div className="izu-empty">
+            <div className="izu-empty-mark">
+              !
+            </div>
+
+            <h3>
+              旅の記憶を読み込めませんでした
+            </h3>
+
+            <p>
+              {loadError}
+            </p>
+
+            <button
+              type="button"
+              className="izu-text-button"
+              onClick={() => window.location.reload()}
+            >
+              もう一度読み込む
+              <span>↗</span>
+            </button>
           </div>
         ) : filteredPosts.length === 0 ? (
           <div className="izu-empty">
