@@ -1,322 +1,870 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { db, auth } from "@/lib/firebase";
 import {
+  addDoc,
   collection,
+  deleteDoc,
   getDocs,
   query,
   where,
-  addDoc,
-  deleteDoc,
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 
+type Post = {
+  id: string;
+  title?: string;
+  area?: string;
+  images?: string[];
+  tags?: string[];
+  userId?: string;
+  userName?: string;
+  contents?: string[];
+  description?: string;
+  createdAt?: {
+    seconds?: number;
+  };
+  reactions?: {
+    want?: number;
+    same?: number;
+    nice?: number;
+    scene?: number;
+  };
+};
+
+const AREA_NAMES: Record<string, string> = {
+  shimoda: "下田",
+  atami: "熱海",
+  ito: "伊東",
+  izu: "伊豆市",
+  izunokuni: "伊豆の国",
+  higashiizu: "東伊豆",
+  kawazu: "河津",
+  minamiizu: "南伊豆",
+  matsuzaki: "松崎",
+  nishiizu: "西伊豆",
+  kannami: "函南",
+  mishima: "三島",
+  numazu: "沼津",
+};
+
+const QUICK_TAGS = [
+  "海",
+  "温泉",
+  "カフェ",
+  "絶景",
+  "穴場",
+];
+
 export default function Home() {
-  const [posts, setPosts] = useState<any[]>([]);
-  const [keyword, setKeyword] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [sortType, setSortType] = useState<"popular" | "new">("popular");
-  const [mode, setMode] = useState<"all" | "follow">("all");
-
-  const [currentUser, setCurrentUser] = useState<string | null>(null);
-  const [savedPosts, setSavedPosts] = useState<string[]>([]);
-
   const router = useRouter();
 
-  // ログイン
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [keyword, setKeyword] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  const [mode, setMode] =
+    useState<"all" | "follow">("all");
+
+  const [sortType, setSortType] =
+    useState<"new" | "popular">("new");
+
+  const [currentUser, setCurrentUser] =
+    useState<string | null>(null);
+
+  const [savedPosts, setSavedPosts] =
+    useState<string[]>([]);
+
+  const [randomPost, setRandomPost] =
+    useState<Post | null>(null);
+
+  // -----------------------------------------
+  // Firebase Auth
+  // -----------------------------------------
+
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user?.uid || null);
-    });
-    return () => unsub();
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      (user) => {
+        setCurrentUser(user?.uid ?? null);
+      }
+    );
+
+    return () => unsubscribe();
   }, []);
 
+  // -----------------------------------------
   // 投稿取得
+  // -----------------------------------------
+
   useEffect(() => {
     const fetchPosts = async () => {
-      const snapshot = await getDocs(collection(db, "posts"));
-      const data = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      setPosts(data);
-      setLoading(false);
+      try {
+        const snapshot = await getDocs(
+          collection(db, "posts")
+        );
+
+        const data = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        })) as Post[];
+
+        setPosts(data);
+
+        if (data.length > 0) {
+          setRandomPost(
+            data[Math.floor(Math.random() * data.length)]
+          );
+        }
+      } catch (error) {
+        console.error(
+          "投稿の取得に失敗しました",
+          error
+        );
+      } finally {
+        setLoading(false);
+      }
     };
+
     fetchPosts();
   }, []);
 
-  // 保存取得
+  // -----------------------------------------
+  // 保存済み投稿取得
+  // -----------------------------------------
+
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser) {
+      setSavedPosts([]);
+      return;
+    }
 
     const fetchSaved = async () => {
-      const q = query(
-        collection(db, "saved"),
-        where("userId", "==", currentUser)
-      );
+      try {
+        const savedQuery = query(
+          collection(db, "saved"),
+          where(
+            "userId",
+            "==",
+            currentUser
+          )
+        );
 
-      const snap = await getDocs(q);
-      setSavedPosts(snap.docs.map((d) => d.data().postId));
+        const snapshot =
+          await getDocs(savedQuery);
+
+        setSavedPosts(
+          snapshot.docs
+            .map((doc) => doc.data().postId)
+            .filter(Boolean)
+        );
+      } catch (error) {
+        console.error(
+          "保存データの取得に失敗しました",
+          error
+        );
+      }
     };
 
     fetchSaved();
   }, [currentUser]);
 
+  // -----------------------------------------
   // 保存トグル
-  const toggleSave = async (postId: string) => {
-    if (!currentUser) return alert("ログインして");
+  // -----------------------------------------
 
-    const q = query(
-      collection(db, "saved"),
-      where("userId", "==", currentUser),
-      where("postId", "==", postId)
-    );
-
-    const snap = await getDocs(q);
-
-    if (!snap.empty) {
-      snap.forEach(async (d) => await deleteDoc(d.ref));
-      setSavedPosts((prev) => prev.filter((id) => id !== postId));
-    } else {
-      await addDoc(collection(db, "saved"), {
-        userId: currentUser,
-        postId,
-      });
-      setSavedPosts((prev) => [...prev, postId]);
+  const toggleSave = async (
+    postId: string
+  ) => {
+    if (!currentUser) {
+      alert("保存するにはログインしてください");
+      return;
     }
-  };
 
-  // フィルター
-  const followList =
-    typeof window !== "undefined"
-      ? JSON.parse(localStorage.getItem("follow") || "[]")
-      : [];
+    try {
+      const savedQuery = query(
+        collection(db, "saved"),
+        where(
+          "userId",
+          "==",
+          currentUser
+        ),
+        where(
+          "postId",
+          "==",
+          postId
+        )
+      );
 
-  let filtered = posts.filter((post) => {
-    if (mode === "follow" && !followList.includes(post.userId)) return false;
-    if (!keyword) return true;
-    if (!post.tags) return true;
+      const snapshot =
+        await getDocs(savedQuery);
 
-    return post.tags.some((tag: string) => tag.includes(keyword));
-  });
+      if (!snapshot.empty) {
+        await Promise.all(
+          snapshot.docs.map((doc) =>
+            deleteDoc(doc.ref)
+          )
+        );
 
-  // 並び替え
-  filtered = filtered.sort((a, b) => {
-    if (sortType === "new") {
-      return (
-        new Date(b.createdAt?.seconds * 1000 || 0).getTime() -
-        new Date(a.createdAt?.seconds * 1000 || 0).getTime()
+        setSavedPosts((prev) =>
+          prev.filter(
+            (id) => id !== postId
+          )
+        );
+      } else {
+        await addDoc(
+          collection(db, "saved"),
+          {
+            userId: currentUser,
+            postId,
+          }
+        );
+
+        setSavedPosts((prev) => [
+          ...prev,
+          postId,
+        ]);
+      }
+    } catch (error) {
+      console.error(
+        "保存に失敗しました",
+        error
       );
     }
-
-    const score = (p: any) =>
-      (p.reactions?.scene || 0) +
-      (p.reactions?.same || 0) +
-      (p.reactions?.nice || 0);
-
-    return score(b) - score(a);
-  });
-
-  const handleRandom = () => {
-    if (posts.length === 0) return;
-    const randomPost = posts[Math.floor(Math.random() * posts.length)];
-    router.push(`/experience/${randomPost.id}`);
   };
 
+  // -----------------------------------------
+  // 体験文章
+  // -----------------------------------------
+
+  const getExperienceText = (
+    post: Post
+  ) => {
+    return [
+      post.description,
+      ...(post.contents ?? []),
+    ]
+      .filter(
+        (text): text is string =>
+          Boolean(
+            text &&
+            text.trim()
+          )
+      )
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+  };
+
+  // -----------------------------------------
+  // エリア名
+  // -----------------------------------------
+
+  const getAreaName = (
+    post: Post
+  ) => {
+    if (!post.area) return "伊豆";
+
+    return (
+      AREA_NAMES[post.area] ??
+      post.area
+    );
+  };
+
+  // -----------------------------------------
+  // フォロー一覧
+  // -----------------------------------------
+
+  const followList = useMemo(() => {
+    if (typeof window === "undefined") {
+      return [] as string[];
+    }
+
+    try {
+      return JSON.parse(
+        localStorage.getItem("follow") ||
+          "[]"
+      ) as string[];
+    } catch {
+      return [] as string[];
+    }
+  }, []);
+
+  // -----------------------------------------
+  // フィルター・ソート
+  // -----------------------------------------
+
+  const filteredPosts = useMemo(() => {
+    let result = posts.filter((post) => {
+      if (
+        mode === "follow" &&
+        !followList.includes(
+          post.userId ?? ""
+        )
+      ) {
+        return false;
+      }
+
+      if (!keyword.trim()) {
+        return true;
+      }
+
+      const searchText = [
+        post.title ?? "",
+        post.area ?? "",
+        ...(post.tags ?? []),
+        getExperienceText(post),
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return searchText.includes(
+        keyword
+          .trim()
+          .toLowerCase()
+      );
+    });
+
+    result = [...result].sort(
+      (a, b) => {
+        if (sortType === "new") {
+          return (
+            (b.createdAt?.seconds ?? 0) -
+            (a.createdAt?.seconds ?? 0)
+          );
+        }
+
+        const score = (
+          post: Post
+        ) => {
+          const reactions =
+            post.reactions ?? {};
+
+          return (
+            (reactions.want ?? 0) +
+            (reactions.same ?? 0) +
+            (reactions.nice ?? 0) +
+            (reactions.scene ?? 0)
+          );
+        };
+
+        return score(b) - score(a);
+      }
+    );
+
+    return result;
+  }, [
+    posts,
+    keyword,
+    mode,
+    sortType,
+    followList,
+  ]);
+
+  // -----------------------------------------
+  // ランダムな思い出
+  // -----------------------------------------
+
+  const drawMemory = () => {
+    if (posts.length === 0) {
+      return;
+    }
+
+    const next =
+      posts[
+        Math.floor(
+          Math.random() * posts.length
+        )
+      ];
+
+    setRandomPost(next);
+  };
+
+  // -----------------------------------------
+  // 表示
+  // -----------------------------------------
+
   return (
-    <main style={container}>
-      {/* モード */}
-      <div style={row}>
-        <button style={btn(mode === "all")} onClick={() => setMode("all")}>
-          全体
-        </button>
-        <button style={btn(mode === "follow")} onClick={() => setMode("follow")}>
-          フォロー中
-        </button>
-      </div>
+    <div className="izu-home">
 
-      {/* 検索 */}
-      <p style={title}>旅を検索</p>
-      <input
-        value={keyword}
-        onChange={(e) => setKeyword(e.target.value)}
-        placeholder="雨・夜・静か"
-        style={input}
-      />
+      {/* =====================================
+          INTRO
+      ===================================== */}
 
-      {/* ランダム */}
-      <p style={title}>偶然の旅に出会う</p>
+      <section className="izu-intro">
 
-      <div style={hero} onClick={handleRandom}>
-        <img src="/teishoku.jpg" style={heroImg} />
+        <div className="izu-intro-inner">
 
-        {/* グラデーション */}
-        <div style={overlay} />
+          <p className="izu-eyebrow">
+            IZUSCAPE
+          </p>
 
-        {/* テキスト（残して強化） */}
-        <div style={heroText}>旅を引く</div>
-      </div>
+          <h1 className="izu-main-title">
+            みんなの
+            <br />
+            <em>旅きろく。</em>
+          </h1>
 
-      {/* 並び替え */}
-      <div style={row}>
-        <button style={btn(sortType === "popular")} onClick={() => setSortType("popular")}>
-          人気
-        </button>
-        <button style={btn(sortType === "new")} onClick={() => setSortType("new")}>
-          新着
-        </button>
-      </div>
+          <p className="izu-intro-text">
+            伊豆で過ごした、誰かの時間。
+            <br />
+            写真とことばから、
+            <br className="mobile-only" />
+            旅の記憶に出会おう。
+          </p>
 
-      {loading && <p>読み込み中...</p>}
+          <div className="izu-search">
 
-      <div style={grid}>
-        {filtered.map((post) => (
-          <div
-            key={post.id}
-            style={card}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = "scale(1.03)";
-              e.currentTarget.style.boxShadow =
-                "0 8px 20px rgba(31,61,43,0.2)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = "scale(1)";
-              e.currentTarget.style.boxShadow =
-                "0 6px 16px rgba(31,61,43,0.1)";
-            }}
-          >
-            <Link href={`/experience/${post.id}`}>
-              <div style={{ position: "relative" }}>
-                <img src={post.images?.[0]} style={img} />
+            <span className="izu-search-icon">
+              ⌕
+            </span>
 
-                <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    toggleSave(post.id);
-                  }}
-                  style={saveBtn}
-                >
-                  {savedPosts.includes(post.id) ? "❤️" : "🤍"}
-                </button>
-              </div>
-            </Link>
+            <input
+              value={keyword}
+              onChange={(event) =>
+                setKeyword(
+                  event.target.value
+                )
+              }
+              placeholder="思い出を探す"
+              aria-label="思い出を検索"
+            />
 
-            <div style={{ padding: "10px" }}>
-              <p style={postTitle}>{post.title}</p>
-              <small style={{ color: "#777" }}>
-                {post.userName || "匿名"}
-              </small>
-            </div>
+            {keyword && (
+              <button
+                type="button"
+                className="izu-search-clear"
+                onClick={() =>
+                  setKeyword("")
+                }
+                aria-label="検索をクリア"
+              >
+                ×
+              </button>
+            )}
+
           </div>
-        ))}
-      </div>
-    </main>
+
+          <div className="izu-quick-tags">
+
+            {QUICK_TAGS.map(
+              (tag) => (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() =>
+                    setKeyword(tag)
+                  }
+                >
+                  {tag}
+                </button>
+              )
+            )}
+
+          </div>
+
+        </div>
+
+      </section>
+
+      {/* =====================================
+          MEMORY OF THE DAY
+      ===================================== */}
+
+      {!keyword && randomPost && (
+        <section className="izu-discovery">
+
+          <div className="izu-section-head">
+
+            <div>
+              <p className="izu-section-kicker">
+                DISCOVER
+              </p>
+
+              <h2>
+                偶然の思い出に出会う
+              </h2>
+            </div>
+
+            <button
+              type="button"
+              className="izu-text-button"
+              onClick={drawMemory}
+            >
+              別の旅を見る
+              <span>↗</span>
+            </button>
+
+          </div>
+
+          <Link
+            href={`/experience/${randomPost.id}`}
+            className="izu-discovery-card"
+          >
+
+            <img
+              src={
+                randomPost.images?.[0]
+              }
+              alt={
+                randomPost.title ||
+                "伊豆の旅の写真"
+              }
+            />
+
+            <div className="izu-discovery-overlay" />
+
+            <div className="izu-discovery-content">
+
+              <div className="izu-location">
+                <span>●</span>
+                {getAreaName(
+                  randomPost
+                )}
+              </div>
+
+              <h3>
+                {randomPost.title ||
+                  "旅の記録"}
+              </h3>
+
+              {getExperienceText(
+                randomPost
+              ) && (
+                <p>
+                  {getExperienceText(
+                    randomPost
+                  ).slice(0, 130)}
+                  {getExperienceText(
+                    randomPost
+                  ).length > 130
+                    ? "…"
+                    : ""}
+                </p>
+              )}
+
+              <span className="izu-discovery-author">
+                {randomPost.userName ||
+                  "匿名"}さんの旅
+              </span>
+
+            </div>
+
+          </Link>
+
+        </section>
+      )}
+
+      {/* =====================================
+          FEED
+      ===================================== */}
+
+      <section className="izu-feed">
+
+        <div className="izu-feed-top">
+
+          <div>
+            <p className="izu-section-kicker">
+              MEMORIES
+            </p>
+
+            <h2>
+              {keyword
+                ? `「${keyword}」の旅きろく`
+                : "みんなの旅きろく"}
+            </h2>
+          </div>
+
+          <div className="izu-sort">
+
+            <button
+              type="button"
+              className={
+                sortType === "new"
+                  ? "active"
+                  : ""
+              }
+              onClick={() =>
+                setSortType("new")
+              }
+            >
+              新着
+            </button>
+
+            <button
+              type="button"
+              className={
+                sortType === "popular"
+                  ? "active"
+                  : ""
+              }
+              onClick={() =>
+                setSortType(
+                  "popular"
+                )
+              }
+            >
+              人気
+            </button>
+
+          </div>
+
+        </div>
+
+        <div className="izu-mode">
+
+          <button
+            type="button"
+            className={
+              mode === "all"
+                ? "active"
+                : ""
+            }
+            onClick={() =>
+              setMode("all")
+            }
+          >
+            みんなの旅
+          </button>
+
+          <button
+            type="button"
+            className={
+              mode === "follow"
+                ? "active"
+                : ""
+            }
+            onClick={() =>
+              setMode("follow")
+            }
+          >
+            フォロー中
+          </button>
+
+        </div>
+
+        {loading ? (
+          <div className="izu-loading">
+            <span />
+            <p>
+              旅の記憶を集めています…
+            </p>
+          </div>
+        ) : filteredPosts.length === 0 ? (
+          <div className="izu-empty">
+
+            <div className="izu-empty-mark">
+              ○
+            </div>
+
+            <h3>
+              まだ旅が見つかりません
+            </h3>
+
+            <p>
+              別のことばで探してみるか、
+              <br />
+              新しい旅を記録してみませんか？
+            </p>
+
+          </div>
+        ) : (
+          <div className="izu-memory-grid">
+
+            {filteredPosts.map(
+              (post) => {
+                const experience =
+                  getExperienceText(
+                    post
+                  );
+
+                const saved =
+                  savedPosts.includes(
+                    post.id
+                  );
+
+                const reactionCount =
+                  (post.reactions?.want ??
+                    0) +
+                  (post.reactions?.same ??
+                    0) +
+                  (post.reactions?.nice ??
+                    0);
+
+                return (
+                  <article
+                    key={post.id}
+                    className="izu-memory-card"
+                  >
+
+                    <Link
+                      href={`/experience/${post.id}`}
+                      className="izu-card-image"
+                    >
+
+                      {post.images?.[0] ? (
+                        <img
+                          src={
+                            post.images[0]
+                          }
+                          alt={
+                            post.title ||
+                            "旅の写真"
+                          }
+                        />
+                      ) : (
+                        <div className="izu-no-image">
+                          IZUscape
+                        </div>
+                      )}
+
+                      <span className="izu-card-location">
+                        {getAreaName(
+                          post
+                        )}
+                      </span>
+
+                    </Link>
+
+                    <div className="izu-card-content">
+
+                      <div className="izu-card-meta">
+
+                        <span>
+                          {post.userName ||
+                            "匿名"}
+                        </span>
+
+                        {post.tags?.[0] && (
+                          <>
+                            <span className="izu-meta-dot">
+                              ·
+                            </span>
+
+                            <span>
+                              #
+                              {
+                                post.tags[0]
+                              }
+                            </span>
+                          </>
+                        )}
+
+                      </div>
+
+                      <Link
+                        href={`/experience/${post.id}`}
+                        className="izu-card-title"
+                      >
+                        {post.title ||
+                          "旅の記録"}
+                      </Link>
+
+                      {experience && (
+                        <Link
+                          href={`/experience/${post.id}`}
+                          className="izu-card-story"
+                        >
+                          {experience.slice(
+                            0,
+                            115
+                          )}
+                          {experience.length >
+                          115
+                            ? "…"
+                            : ""}
+                        </Link>
+                      )}
+
+                      <div className="izu-card-bottom">
+
+                        <span className="izu-card-reaction">
+                          {reactionCount > 0
+                            ? `${reactionCount}人の旅につながっています`
+                            : "旅の記録を残しました"}
+                        </span>
+
+                        <button
+                          type="button"
+                          className={
+                            saved
+                              ? "izu-save saved"
+                              : "izu-save"
+                          }
+                          onClick={() =>
+                            toggleSave(
+                              post.id
+                            )
+                          }
+                          aria-label={
+                            saved
+                              ? "保存を解除"
+                              : "保存する"
+                          }
+                        >
+                          {saved
+                            ? "♥"
+                            : "♡"}
+                        </button>
+
+                      </div>
+
+                    </div>
+
+                  </article>
+                );
+              }
+            )}
+
+          </div>
+        )}
+
+      </section>
+
+      {/* =====================================
+          ENDING
+      ===================================== */}
+
+      <section className="izu-ending">
+
+        <div className="izu-ending-mark">
+          <span />
+        </div>
+
+        <p className="izu-section-kicker">
+          YOUR MEMORY
+        </p>
+
+        <h2>
+          あなたの旅が、
+          <br />
+          誰かの旅になる。
+        </h2>
+
+        <p>
+          思い出を残すことは、
+          <br />
+          次の誰かへ旅を渡すこと。
+        </p>
+
+        <Link
+          href={
+            currentUser
+              ? "/post"
+              : "/login"
+          }
+          className="izu-record-button"
+        >
+          旅を記録する
+          <span>↗</span>
+        </Link>
+
+      </section>
+
+    </div>
   );
 }
-
-///////////////////////////
-
-const container = {
-  maxWidth: "600px",
-  margin: "0 auto",
-  padding: "20px",
-};
-
-const row = {
-  display: "flex",
-  gap: "10px",
-  marginTop: "10px",
-};
-
-const btn = (active: boolean) => ({
-  flex: 1,
-  padding: "8px",
-  borderRadius: "10px",
-  border: "none",
-  background: active ? "#1F3D2B" : "#eee",
-  color: active ? "#fff" : "#333",
-});
-
-const input = {
-  width: "100%",
-  padding: "10px",
-  borderRadius: "10px",
-  border: "1px solid #ccc",
-};
-
-const hero = {
-  position: "relative" as const,
-  marginTop: "10px",
-  borderRadius: "15px",
-  overflow: "hidden",
-};
-
-const heroImg = {
-  width: "100%",
-  height: "180px",
-  objectFit: "cover" as const,
-};
-
-const overlay = {
-  position: "absolute" as const,
-  bottom: 0,
-  width: "100%",
-  height: "50%",
-  background: "linear-gradient(to top, rgba(0,0,0,0.6), transparent)",
-};
-
-const heroText = {
-  position: "absolute" as const,
-  bottom: "12px",
-  left: "12px",
-  color: "#fff",
-  fontWeight: "bold",
-  fontSize: "18px",
-  textShadow: "0 2px 6px rgba(0,0,0,0.6)",
-};
-
-const grid = {
-  display: "grid",
-  gridTemplateColumns: "1fr 1fr",
-  gap: "14px",
-};
-
-const card = {
-  background: "#fff",
-  borderRadius: "16px",
-  overflow: "hidden",
-  boxShadow: "0 6px 16px rgba(31,61,43,0.1)",
-  transition: "0.2s",
-};
-
-const img = {
-  width: "100%",
-  height: "140px",
-  objectFit: "cover" as const,
-};
-
-const saveBtn = {
-  position: "absolute" as const,
-  top: "8px",
-  right: "8px",
-  background: "#fff",
-  borderRadius: "50%",
-  width: "32px",
-  height: "32px",
-  border: "none",
-};
-
-const postTitle = {
-  fontSize: "14px",
-  fontWeight: "bold",
-};
-
-const title = {
-  marginTop: "20px",
-  fontWeight: "bold",
-  color: "#1F3D2B",
-};
