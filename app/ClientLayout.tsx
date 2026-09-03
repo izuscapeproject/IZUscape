@@ -23,7 +23,10 @@ export default function ClientLayout({
   const [profileImage, setProfileImage] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
 
+  // =====================================
   // Firebaseログイン状態
+  // =====================================
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(
       auth,
@@ -43,12 +46,18 @@ export default function ClientLayout({
     return () => unsubscribe();
   }, []);
 
+  // =====================================
   // ページ移動したらメニューを閉じる
+  // =====================================
+
   useEffect(() => {
     setMenuOpen(false);
   }, [pathname]);
 
+  // =====================================
   // ログアウト
+  // =====================================
+
   const handleLogout = async () => {
     const ok = window.confirm(
       "ログアウトしますか？"
@@ -71,6 +80,10 @@ export default function ClientLayout({
     }
   };
 
+  // =====================================
+  // 現在のページかどうか
+  // =====================================
+
   const isActive = (
     path: string
   ) => {
@@ -87,7 +100,10 @@ export default function ClientLayout({
 
         <div className="izu-header-inner">
 
-          {/* ロゴ */}
+          {/* =================================
+              ロゴ
+          ================================= */}
+
           <Link
             href="/"
             className="izu-logo"
@@ -102,22 +118,17 @@ export default function ClientLayout({
             </span>
           </Link>
 
-          {/* PC NAV */}
+          {/* =================================
+              PC NAV
+          ================================= */}
+
           <nav
             className="izu-header-nav"
             aria-label="メインナビゲーション"
           >
 
-            <Link
-              href="/area/shimoda"
-              className={
-                pathname.startsWith("/area")
-                  ? "active"
-                  : ""
-              }
-            >
-              探す
-            </Link>
+
+            {/* 保存 */}
 
             {user && (
               <Link
@@ -131,6 +142,25 @@ export default function ClientLayout({
                 保存
               </Link>
             )}
+
+            {/* =================================
+                自分の旅
+            ================================= */}
+
+            {user && (
+              <Link
+                href="/trip"
+                className={
+                  pathname.startsWith("/trip")
+                    ? "active"
+                    : ""
+                }
+              >
+                自分の旅
+              </Link>
+            )}
+
+            {/* マイページ */}
 
             {user && (
               <Link
@@ -146,6 +176,10 @@ export default function ClientLayout({
                 マイページ
               </Link>
             )}
+
+            {/* =================================
+                旅を記録する
+            ================================= */}
 
             {user ? (
               <Link
@@ -169,7 +203,10 @@ export default function ClientLayout({
               </Link>
             )}
 
-            {/* プロフィール画像 */}
+            {/* =================================
+                プロフィール画像
+            ================================= */}
+
             {user && (
               <Link
                 href={`/profile/${user.uid}`}
@@ -191,7 +228,10 @@ export default function ClientLayout({
 
           </nav>
 
-          {/* MOBILE MENU BUTTON */}
+          {/* =================================
+              MOBILE MENU BUTTON
+          ================================= */}
+
           <button
             type="button"
             className={
@@ -240,13 +280,19 @@ export default function ClientLayout({
               aria-label="モバイルナビゲーション"
             >
 
+              {/* 探す */}
+
               <Link href="/area/shimoda">
                 <span>
                   思い出を探す
                 </span>
 
-                <span>↗</span>
+                <span>
+                  ↗
+                </span>
               </Link>
+
+              {/* 保存 */}
 
               {user && (
                 <Link href="/saved">
@@ -254,9 +300,29 @@ export default function ClientLayout({
                     保存した思い出
                   </span>
 
-                  <span>↗</span>
+                  <span>
+                    ↗
+                  </span>
                 </Link>
               )}
+
+              {/* =================================
+                  自分の旅
+              ================================= */}
+
+              {user && (
+                <Link href="/trip">
+                  <span>
+                    自分の旅
+                  </span>
+
+                  <span>
+                    ↗
+                  </span>
+                </Link>
+              )}
+
+              {/* マイページ */}
 
               {user && (
                 <Link
@@ -266,11 +332,17 @@ export default function ClientLayout({
                     マイページ
                   </span>
 
-                  <span>↗</span>
+                  <span>
+                    ↗
+                  </span>
                 </Link>
               )}
 
               <div className="izu-mobile-divider" />
+
+              {/* =================================
+                  旅を記録する
+              ================================= */}
 
               {user ? (
                 <Link
@@ -281,7 +353,9 @@ export default function ClientLayout({
                     旅を記録する
                   </span>
 
-                  <span>↗</span>
+                  <span>
+                    ↗
+                  </span>
                 </Link>
               ) : (
                 <Link
@@ -292,9 +366,13 @@ export default function ClientLayout({
                     ログインする
                   </span>
 
-                  <span>↗</span>
+                  <span>
+                    ↗
+                  </span>
                 </Link>
               )}
+
+              {/* ログアウト */}
 
               {user && (
                 <button
