@@ -8,6 +8,7 @@ import { auth } from "@/lib/firebase";
 import {
   onAuthStateChanged,
   signOut,
+  type User,
 } from "firebase/auth";
 
 export default function ClientLayout({
@@ -18,39 +19,47 @@ export default function ClientLayout({
   const pathname = usePathname();
   const router = useRouter();
 
-  const [user, setUser] = useState<any>(null);
-  const [profileImage, setProfileImage] =
-    useState("");
+  const [user, setUser] = useState<User | null>(null);
+  const [profileImage, setProfileImage] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
 
-  // ログイン状態取得
-  // 🔥 Firebase Auth の photoURL を使う
+  // =====================================
+  // Firebaseログイン状態
+  // =====================================
+
   useEffect(() => {
-    const unsubscribe =
-      onAuthStateChanged(
-        auth,
-        (currentUser) => {
-          setUser(currentUser);
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      (currentUser) => {
+        setUser(currentUser);
 
-          if (currentUser) {
-            setProfileImage(
-              currentUser.photoURL || ""
-            );
-          } else {
-            setProfileImage("");
-          }
+        if (currentUser) {
+          setProfileImage(
+            currentUser.photoURL || ""
+          );
+        } else {
+          setProfileImage("");
         }
-      );
+      }
+    );
 
     return () => unsubscribe();
   }, []);
 
-  const isActive = (path: string) => {
-    return pathname === path;
-  };
+  // =====================================
+  // ページ移動したらメニューを閉じる
+  // =====================================
 
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname]);
+
+  // =====================================
   // ログアウト
+  // =====================================
+
   const handleLogout = async () => {
-    const ok = confirm(
+    const ok = window.confirm(
       "ログアウトしますか？"
     );
 
@@ -58,354 +67,346 @@ export default function ClientLayout({
 
     try {
       await signOut(auth);
-      alert("ログアウトしました");
       router.push("/login");
     } catch (error) {
-      console.error(error);
-      alert("ログアウトに失敗しました");
+      console.error(
+        "ログアウトに失敗しました",
+        error
+      );
+
+      alert(
+        "ログアウトに失敗しました"
+      );
     }
+  };
+
+  // =====================================
+  // 現在のページかどうか
+  // =====================================
+
+  const isActive = (
+    path: string
+  ) => {
+    return pathname === path;
   };
 
   return (
     <>
-      {/* 上ヘッダー */}
-      <header className="header">
-        <Link href="/" style={logo}>
-          IZUscape
-        </Link>
+      {/* =====================================
+          HEADER
+      ===================================== */}
 
-        <div style={headerRight}>
-          {user ? (
-            <>
-              <Link
-                href="/post"
-                style={headerLink}
-              >
-                投稿
-              </Link>
+      <header className="izu-header">
 
+        <div className="izu-header-inner">
+
+          {/* =================================
+              ロゴ
+          ================================= */}
+
+          <Link
+            href="/"
+            className="izu-logo"
+            aria-label="IZUscape ホーム"
+          >
+            <span className="izu-logo-main">
+              IZUscape
+            </span>
+
+            <span className="izu-logo-sub">
+              memories of Izu
+            </span>
+          </Link>
+
+          {/* =================================
+              PC NAV
+          ================================= */}
+
+          <nav
+            className="izu-header-nav"
+            aria-label="メインナビゲーション"
+          >
+
+
+            {/* 保存 */}
+
+            {user && (
               <Link
                 href="/saved"
-                style={headerLink}
+                className={
+                  isActive("/saved")
+                    ? "active"
+                    : ""
+                }
               >
                 保存
               </Link>
+            )}
 
-              {/* 上プロフィール画像 */}
+            {/* =================================
+                自分の旅
+            ================================= */}
+
+            {user && (
+              <Link
+                href="/trip"
+                className={
+                  pathname.startsWith("/trip")
+                    ? "active"
+                    : ""
+                }
+              >
+                自分の旅
+              </Link>
+            )}
+
+            {/* マイページ */}
+
+            {user && (
               <Link
                 href={`/profile/${user.uid}`}
-                style={profileLink}
+                className={
+                  pathname.startsWith(
+                    "/profile"
+                  )
+                    ? "active"
+                    : ""
+                }
+              >
+                マイページ
+              </Link>
+            )}
+
+            {/* =================================
+                旅を記録する
+            ================================= */}
+
+            {user ? (
+              <Link
+                href="/post"
+                className="izu-record-link"
+              >
+                <span>
+                  旅を記録する
+                </span>
+
+                <span className="izu-record-arrow">
+                  ↗
+                </span>
+              </Link>
+            ) : (
+              <Link
+                href="/login"
+                className="izu-login-link"
+              >
+                ログイン
+              </Link>
+            )}
+
+            {/* =================================
+                プロフィール画像
+            ================================= */}
+
+            {user && (
+              <Link
+                href={`/profile/${user.uid}`}
+                className="izu-header-profile"
+                aria-label="マイページ"
               >
                 {profileImage ? (
                   <img
                     src={profileImage}
-                    alt="profile"
-                    style={profileImg}
+                    alt=""
                   />
                 ) : (
-                  <div
-                    style={fallbackIcon}
-                  >
-                    👤
-                  </div>
+                  <span>
+                    ○
+                  </span>
                 )}
               </Link>
+            )}
 
-              <button
-                onClick={handleLogout}
-                style={logoutBtn}
-              >
-                ログアウト
-              </button>
-            </>
-          ) : (
-            <Link
-              href="/login"
-              style={loginBtn}
-            >
-              ログイン
-            </Link>
-          )}
+          </nav>
+
+          {/* =================================
+              MOBILE MENU BUTTON
+          ================================= */}
+
+          <button
+            type="button"
+            className={
+              menuOpen
+                ? "izu-menu-button open"
+                : "izu-menu-button"
+            }
+            onClick={() =>
+              setMenuOpen(
+                (prev) => !prev
+              )
+            }
+            aria-label={
+              menuOpen
+                ? "メニューを閉じる"
+                : "メニューを開く"
+            }
+            aria-expanded={menuOpen}
+          >
+            <span />
+            <span />
+          </button>
+
         </div>
+
+        {/* =====================================
+            MOBILE MENU
+        ===================================== */}
+
+        <div
+          className={
+            menuOpen
+              ? "izu-mobile-menu open"
+              : "izu-mobile-menu"
+          }
+        >
+
+          <div className="izu-mobile-menu-inner">
+
+            <p className="izu-mobile-kicker">
+              IZUSCAPE
+            </p>
+
+            <nav
+              className="izu-mobile-nav"
+              aria-label="モバイルナビゲーション"
+            >
+
+              {/* 探す */}
+
+              <Link href="/area/shimoda">
+                <span>
+                  思い出を探す
+                </span>
+
+                <span>
+                  ↗
+                </span>
+              </Link>
+
+              {/* 保存 */}
+
+              {user && (
+                <Link href="/saved">
+                  <span>
+                    保存した思い出
+                  </span>
+
+                  <span>
+                    ↗
+                  </span>
+                </Link>
+              )}
+
+              {/* =================================
+                  自分の旅
+              ================================= */}
+
+              {user && (
+                <Link href="/trip">
+                  <span>
+                    自分の旅
+                  </span>
+
+                  <span>
+                    ↗
+                  </span>
+                </Link>
+              )}
+
+              {/* マイページ */}
+
+              {user && (
+                <Link
+                  href={`/profile/${user.uid}`}
+                >
+                  <span>
+                    マイページ
+                  </span>
+
+                  <span>
+                    ↗
+                  </span>
+                </Link>
+              )}
+
+              <div className="izu-mobile-divider" />
+
+              {/* =================================
+                  旅を記録する
+              ================================= */}
+
+              {user ? (
+                <Link
+                  href="/post"
+                  className="primary"
+                >
+                  <span>
+                    旅を記録する
+                  </span>
+
+                  <span>
+                    ↗
+                  </span>
+                </Link>
+              ) : (
+                <Link
+                  href="/login"
+                  className="primary"
+                >
+                  <span>
+                    ログインする
+                  </span>
+
+                  <span>
+                    ↗
+                  </span>
+                </Link>
+              )}
+
+              {/* ログアウト */}
+
+              {user && (
+                <button
+                  type="button"
+                  className="izu-mobile-logout"
+                  onClick={
+                    handleLogout
+                  }
+                >
+                  ログアウト
+                </button>
+              )}
+
+            </nav>
+
+            <p className="izu-mobile-caption">
+              誰かの旅が、
+              <br />
+              あなたの旅になる。
+            </p>
+
+          </div>
+
+        </div>
+
       </header>
 
-      {/* メイン */}
-      <main
-        style={{
-          paddingBottom: "110px",
-        }}
-      >
+      {/* =====================================
+          MAIN
+      ===================================== */}
+
+      <main className="izu-main">
         {children}
       </main>
-
-      {/* 下ナビ */}
-      <footer style={footer}>
-        {/* ホーム */}
-        <Link
-          href="/"
-          style={navItem(
-            isActive("/")
-          )}
-        >
-          <div
-            style={iconCircle(
-              isActive("/")
-            )}
-          >
-            🏠
-          </div>
-          <span>ホーム</span>
-        </Link>
-
-        {/* 探す */}
-        <Link
-          href="/area/shimoda"
-          style={navItem(
-            pathname.includes(
-              "/area"
-            )
-          )}
-        >
-          <div
-            style={iconCircle(
-              pathname.includes(
-                "/area"
-              )
-            )}
-          >
-            🔍
-          </div>
-          <span>探す</span>
-        </Link>
-
-        {/* 投稿 */}
-        <Link
-          href={
-            user
-              ? "/post"
-              : "/login"
-          }
-          style={centerPost}
-        >
-          <div style={postCircle}>
-            ＋
-          </div>
-
-          <span style={postText}>
-            投稿
-          </span>
-        </Link>
-
-        {/* 保存 */}
-        <Link
-          href={
-            user
-              ? "/saved"
-              : "/login"
-          }
-          style={navItem(
-            isActive("/saved")
-          )}
-        >
-          <div
-            style={iconCircle(
-              isActive("/saved")
-            )}
-          >
-            ❤️
-          </div>
-          <span>保存</span>
-        </Link>
-
-        {/* マイ */}
-        <Link
-          href={
-            user
-              ? `/profile/${user.uid}`
-              : "/login"
-          }
-          style={navItem(
-            pathname.includes(
-              "/profile"
-            )
-          )}
-        >
-          {profileImage ? (
-            <img
-              src={profileImage}
-              alt="profile"
-              style={
-                bottomProfileImg
-              }
-            />
-          ) : (
-            <div
-              style={iconCircle(
-                pathname.includes(
-                  "/profile"
-                )
-              )}
-            >
-              👤
-            </div>
-          )}
-
-          <span>マイ</span>
-        </Link>
-      </footer>
     </>
   );
 }
-
-////////////////////////////////////////////////
-
-const logo = {
-  fontWeight: "bold",
-  fontSize: "28px",
-  color: "#1F3D2B",
-  textDecoration: "none",
-};
-
-const headerRight = {
-  display: "flex",
-  alignItems: "center",
-  gap: "18px",
-};
-
-const headerLink = {
-  textDecoration: "none",
-  color: "#333",
-  fontWeight: "600",
-  fontSize: "14px",
-};
-
-const profileLink = {
-  textDecoration: "none",
-};
-
-const profileImg = {
-  width: "40px",
-  height: "40px",
-  borderRadius: "50%",
-  objectFit: "cover" as const,
-};
-
-const bottomProfileImg = {
-  width: "42px",
-  height: "42px",
-  borderRadius: "50%",
-  objectFit: "cover" as const,
-  background: "#EAF5EF",
-};
-
-const fallbackIcon = {
-  width: "40px",
-  height: "40px",
-  borderRadius: "50%",
-  background: "#EAF5EF",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  fontSize: "20px",
-};
-
-const loginBtn = {
-  textDecoration: "none",
-  background: "#1F3D2B",
-  color: "#fff",
-  padding: "10px 18px",
-  borderRadius: "999px",
-  fontWeight: "bold",
-  fontSize: "14px",
-};
-
-const logoutBtn = {
-  border: "none",
-  background: "transparent",
-  color: "#666",
-  cursor: "pointer",
-  fontWeight: "600",
-  fontSize: "14px",
-};
-
-const footer = {
-  position: "fixed" as const,
-  bottom: 0,
-  left: 0,
-  width: "100%",
-  background:
-    "rgba(255,255,255,0.95)",
-  backdropFilter: "blur(10px)",
-  borderTop: "1px solid #eee",
-  display: "flex",
-  justifyContent: "space-around",
-  alignItems: "center",
-  padding: "10px 0 14px",
-  zIndex: 999,
-  boxShadow:
-    "0 -4px 20px rgba(0,0,0,0.04)",
-};
-
-const navItem = (
-  active: boolean
-) => ({
-  display: "flex",
-  flexDirection: "column" as const,
-  alignItems: "center",
-  justifyContent: "center",
-  fontSize: "11px",
-  color: active
-    ? "#1F3D2B"
-    : "#999",
-  textDecoration: "none",
-  fontWeight: active
-    ? "bold"
-    : "normal",
-  gap: "6px",
-});
-
-const iconCircle = (
-  active: boolean
-) => ({
-  width: "42px",
-  height: "42px",
-  borderRadius: "50%",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  background: active
-    ? "#EAF5EF"
-    : "transparent",
-  fontSize: "20px",
-  transition: "0.2s",
-});
-
-const centerPost = {
-  display: "flex",
-  flexDirection: "column" as const,
-  alignItems: "center",
-  textDecoration: "none",
-  marginTop: "-30px",
-};
-
-const postCircle = {
-  width: "64px",
-  height: "64px",
-  borderRadius: "50%",
-  background: "#1F3D2B",
-  color: "#fff",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  fontSize: "34px",
-  fontWeight: "bold",
-  boxShadow:
-    "0 8px 24px rgba(31,61,43,0.25)",
-};
-
-const postText = {
-  marginTop: "6px",
-  fontSize: "11px",
-  color: "#1F3D2B",
-  fontWeight: "bold",
-};

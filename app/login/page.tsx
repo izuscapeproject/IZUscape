@@ -1,14 +1,21 @@
 "use client";
 
 import { auth, db } from "@/lib/firebase";
-import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
-import { doc, setDoc, getDoc } from "firebase/firestore";
+import {
+  GoogleAuthProvider,
+  signInWithPopup,
+} from "firebase/auth";
+import {
+  doc,
+  setDoc,
+  getDoc,
+} from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
 export default function Login() {
   const router = useRouter();
 
-  // 🔥 ユーザー作成（存在しない場合のみ）
+  // ユーザー作成（存在しない場合のみ）
   const createUserIfNotExists = async (user: any) => {
     const ref = doc(db, "users", user.uid);
     const snap = await getDoc(ref);
@@ -23,21 +30,31 @@ export default function Login() {
     }
   };
 
-  // 🔥 ログイン処理
+  // Googleログイン
   const login = async () => {
     try {
       const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
+
+      const result = await signInWithPopup(
+        auth,
+        provider
+      );
 
       await createUserIfNotExists(result.user);
 
       alert("ログイン成功！");
 
-      // 🔥 ここ重要（ホームに戻す）
       router.push("/");
-    } catch (e) {
-      console.error(e);
-      alert("ログイン失敗");
+    } catch (e: any) {
+      console.error("Googleログインエラー:", e);
+
+      alert(
+        `ログイン失敗\n\nコード: ${
+          e?.code ?? "不明"
+        }\nメッセージ: ${
+          e?.message ?? "不明"
+        }`
+      );
     }
   };
 
@@ -45,16 +62,20 @@ export default function Login() {
     <div style={wrap}>
       <h2 style={title}>ログイン</h2>
 
-      <button onClick={login} style={btn}>
+      <button
+        type="button"
+        onClick={login}
+        style={btn}
+      >
         Googleでログイン
       </button>
     </div>
   );
 }
 
-//
-// 🎨 UI
-//
+// =========================================================
+// UI
+// =========================================================
 
 const wrap = {
   padding: "40px 20px",

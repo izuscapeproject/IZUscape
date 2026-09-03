@@ -14,132 +14,282 @@ import {
   getDoc,
 } from "firebase/firestore";
 
+type UserData = {
+  id: string;
+  name?: string;
+  bio?: string;
+  avatarUrl?: string;
+};
+
 export default function FollowersPage() {
   const { user } = useParams();
-  const [users, setUsers] = useState<any[]>([]);
+  const userId = user as string;
+
+  const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!userId) return;
+
     const fetchFollowers = async () => {
       try {
-        // 🔥 フォロワー取得
         const q = query(
           collection(db, "follows"),
-          where("followingId", "==", user)
+          where("followingId", "==", userId)
         );
 
         const snap = await getDocs(q);
 
         const followerIds = snap.docs.map(
-          (d) => d.data().followerId
+          (d) => d.data().followerId as string
         );
 
-        // 🔥 ユーザー情報取得
         const results = await Promise.all(
-          followerIds.map(async (id: string) => {
-            const userSnap = await getDoc(doc(db, "users", id));
+          followerIds.map(async (id) => {
+            const userSnap = await getDoc(
+              doc(db, "users", id)
+            );
 
-            if (userSnap.exists()) {
-              return { id, ...userSnap.data() };
-            } else {
-              return { id, name: "ユーザー", avatarUrl: "/default.png" };
+            if (!userSnap.exists()) {
+              return {
+                id,
+                name: "ユーザー",
+                bio: "",
+                avatarUrl: "/default.png",
+              };
             }
+
+            return {
+              id,
+              ...userSnap.data(),
+            } as UserData;
           })
         );
 
         setUsers(results);
-      } catch (e) {
-        console.error(e);
+      } catch (error) {
+        console.error(
+          "[IZUscape] フォロワー取得失敗:",
+          error
+        );
+      } finally {
+        setLoading(false);
       }
-
-      setLoading(false);
     };
 
     fetchFollowers();
-  }, [user]);
+  }, [userId]);
 
   return (
     <main style={container}>
-      <Link href={`/profile/${user}`} style={back}>
-        ← 戻る
+
+      {/* 戻る */}
+      <Link
+        href={`/profile/${userId}`}
+        style={back}
+      >
+        ← プロフィール
       </Link>
 
-      <h2 style={title}>フォロワー</h2>
+      {/* タイトル */}
+      <div style={header}>
+        <h1 style={title}>
+          フォロワー
+        </h1>
 
-      {loading && <p>読み込み中...</p>}
+        {!loading && (
+          <span style={count}>
+            {users.length}人
+          </span>
+        )}
+      </div>
 
-      {!loading && users.length === 0 && (
+      {/* 読み込み */}
+      {loading && (
         <div style={empty}>
-          <p>フォロワーがいません</p>
-          <small>ここにフォロワーが表示されます</small>
+          <p style={emptyTitle}>
+            読み込み中…
+          </p>
         </div>
       )}
 
-      <div>
-        {users.map((u) => (
-          <Link key={u.id} href={`/profile/${u.id}`}>
-            <div style={card}>
-              <img
-                src={u.avatarUrl || "/default.png"}
-                style={avatar}
-              />
+      {/* フォロワーなし */}
+      {!loading && users.length === 0 && (
+        <div style={empty}>
+          <div style={emptyIcon}>
+            👤
+          </div>
 
-              <div>
-                <p style={name}>{u.name}</p>
-              </div>
-            </div>
-          </Link>
-        ))}
-      </div>
+          <p style={emptyTitle}>
+            フォロワーがいません
+          </p>
+
+          <p style={emptyText}>
+            ここにフォロワーが表示されます
+          </p>
+        </div>
+      )}
+
+      {/* ユーザー一覧 */}
+      {!loading && users.length > 0 && (
+        <section style={list}>
+          {users.map((u) => (
+            <Link
+              key={u.id}
+              href={`/profile/${u.id}`}
+              style={userLink}
+            >
+              <article style={userCard}>
+
+                <img
+                  src={
+                    u.avatarUrl ||
+                    "/default.png"
+                  }
+                  alt=""
+                  style={avatar}
+                />
+
+                <div style={userInfo}>
+                  <p style={name}>
+                    {u.name ||
+                      "ユーザー"}
+                  </p>
+
+                  {u.bio && (
+                    <p style={bio}>
+                      {u.bio}
+                    </p>
+                  )}
+                </div>
+
+                <span style={arrow}>
+                  ›
+                </span>
+
+              </article>
+            </Link>
+          ))}
+        </section>
+      )}
+
     </main>
   );
 }
 
-////////////////////////////////////////////////
-
-// 🌿 スタイル
+// =========================================================
+// STYLE
+// =========================================================
 
 const container = {
-  maxWidth: "600px",
+  maxWidth: "700px",
   margin: "0 auto",
-  padding: "20px",
+  padding: "24px 20px 100px",
 };
 
 const back = {
-  color: "#555",
+  color: "#66736D",
   textDecoration: "none",
+  fontSize: "13px",
+};
+
+const header = {
+  display: "flex",
+  alignItems: "baseline",
+  gap: "9px",
+  marginTop: "22px",
+  marginBottom: "15px",
 };
 
 const title = {
-  marginTop: "10px",
-  fontSize: "20px",
-  fontWeight: "bold",
+  margin: 0,
+  fontSize: "21px",
+  fontWeight: "700",
   color: "#1F3D2B",
 };
 
-const empty = {
-  marginTop: "30px",
-  textAlign: "center" as const,
-  color: "#777",
+const count = {
+  fontSize: "12px",
+  color: "#89938F",
 };
 
-const card = {
+const list = {
+  display: "flex",
+  flexDirection: "column" as const,
+  gap: "8px",
+};
+
+const userLink = {
+  textDecoration: "none",
+  color: "inherit",
+};
+
+const userCard = {
   display: "flex",
   alignItems: "center",
   gap: "12px",
-  padding: "12px",
-  borderBottom: "1px solid #eee",
-  transition: "0.2s",
+  padding: "12px 14px",
+  background: "#fff",
+  border: "1px solid #EEF1EF",
+  borderRadius: "14px",
 };
 
 const avatar = {
-  width: "45px",
-  height: "45px",
+  width: "48px",
+  height: "48px",
   borderRadius: "50%",
   objectFit: "cover" as const,
+  flexShrink: 0,
+};
+
+const userInfo = {
+  minWidth: 0,
+  flex: 1,
 };
 
 const name = {
+  margin: 0,
   fontSize: "14px",
-  fontWeight: "bold",
+  fontWeight: "700",
+  color: "#26352E",
+};
+
+const bio = {
+  margin: "4px 0 0",
+  fontSize: "11px",
+  color: "#7A8782",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap" as const,
+};
+
+const arrow = {
+  fontSize: "22px",
+  color: "#A0AAA5",
+};
+
+const empty = {
+  marginTop: "25px",
+  padding: "45px 20px",
+  textAlign: "center" as const,
+  background: "#FAFBFA",
+  borderRadius: "16px",
+};
+
+const emptyIcon = {
+  fontSize: "28px",
+  marginBottom: "10px",
+};
+
+const emptyTitle = {
+  margin: 0,
+  fontSize: "14px",
+  fontWeight: "700",
+  color: "#46544D",
+};
+
+const emptyText = {
+  margin: "7px 0 0",
+  fontSize: "12px",
+  color: "#89938F",
 };
