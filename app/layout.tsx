@@ -28,8 +28,7 @@ export const metadata = {
   ],
 
   openGraph: {
-    title:
-      "IZUscape | 偶然の出会いを旅する",
+    title: "IZUscape | 偶然の出会いを旅する",
 
     description:
       "伊豆の偶然の出会いを体験でつなぐ、新しい旅アプリ。",
@@ -53,11 +52,9 @@ export const metadata = {
   twitter: {
     card: "summary_large_image",
 
-    title:
-      "IZUscape | 偶然の出会いを旅する",
+    title: "IZUscape | 偶然の出会いを旅する",
 
-    description:
-      "伊豆の体験を共有する新しい旅アプリ",
+    description: "伊豆の体験を共有する新しい旅アプリ",
 
     images: ["/ogp.png"],
   },
@@ -65,6 +62,11 @@ export const metadata = {
   verification: {
     google:
       "0mqKcyIcpKVATqdYV6PBIupiSWWz2N5OzxaGs53jKmg",
+
+    other: {
+      "msvalidate.01":
+        "EAF47742A1B9562D8D37E3AF0E2CCC5D",
+    },
   },
 
   icons: {
