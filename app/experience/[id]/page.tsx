@@ -76,6 +76,12 @@ type Post = {
   };
 };
 
+type UserProfile = {
+  name?: string;
+  bio?: string;
+  avatarUrl?: string;
+};
+
 /* =========================================================
    AREA
 ========================================================= */
@@ -189,6 +195,9 @@ export default function DetailPage() {
 
   const [post, setPost] =
     useState<Post | null>(null);
+
+  const [authorAvatarUrl, setAuthorAvatarUrl] =
+    useState("");
 
   const [allPosts, setAllPosts] =
     useState<Post[]>([]);
@@ -317,6 +326,51 @@ export default function DetailPage() {
 
     fetchPost();
   }, [postId]);
+
+  /* =======================================================
+     AUTHOR PROFILE
+     投稿者のプロフィール画像を取得
+  ======================================================= */
+
+  useEffect(() => {
+    if (!post?.userId) {
+      setAuthorAvatarUrl("");
+      return;
+    }
+
+    const fetchAuthorProfile = async () => {
+      try {
+        const userRef = doc(
+          db,
+          "users",
+          post.userId as string
+        );
+
+        const userSnapshot =
+          await getDoc(userRef);
+
+        if (userSnapshot.exists()) {
+          const userData =
+            userSnapshot.data() as UserProfile;
+
+          setAuthorAvatarUrl(
+            userData.avatarUrl || ""
+          );
+        } else {
+          setAuthorAvatarUrl("");
+        }
+      } catch (error) {
+        console.error(
+          "[IZUscape] 投稿者プロフィール取得失敗:",
+          error
+        );
+
+        setAuthorAvatarUrl("");
+      }
+    };
+
+    fetchAuthorProfile();
+  }, [post?.userId]);
 
   /* =======================================================
      ALL POSTS
@@ -1245,19 +1299,30 @@ export default function DetailPage() {
           <Link
             href={
               post.userId
-                ? `/user/${post.userId}`
+                ? `/profile/${post.userId}`
                 : "#"
             }
             style={author}
           >
-            <span
-              style={avatar}
-            >
-              {(
-                post.userName ||
-                "匿名"
-              ).slice(0, 1)}
-            </span>
+            {authorAvatarUrl ? (
+              <img
+                src={authorAvatarUrl}
+                alt={
+                  post.userName ||
+                  "投稿者"
+                }
+                style={authorAvatarImage}
+              />
+            ) : (
+              <span
+                style={avatar}
+              >
+                {(
+                  post.userName ||
+                  "匿名"
+                ).slice(0, 1)}
+              </span>
+            )}
 
             <span>
               <small
@@ -1285,6 +1350,13 @@ export default function DetailPage() {
             <div
               style={ownerActionRow}
             >
+              <Link
+                href={`/post/edit/${post.id}`}
+                style={editButton}
+              >
+                投稿を編集
+              </Link>
+
               <button
                 type="button"
                 onClick={handleDeletePost}
@@ -1299,7 +1371,7 @@ export default function DetailPage() {
               <span
                 style={deleteHint}
               >
-                自分が投稿した内容のみ削除できます。
+                自分が投稿した内容のみ編集・削除できます。
               </span>
             </div>
           )}
@@ -1761,6 +1833,30 @@ export default function DetailPage() {
                   {reactionError}
                 </p>
               )}
+
+              {/* 旅に追加 */}
+
+              <div
+                style={
+                  tripAddRow
+                }
+              >
+                <Link
+                  href={`/trip?add=${encodeURIComponent(post.id)}`}
+                  style={tripAddButton}
+                >
+                  <span>＋</span>
+                  <span>旅に追加</span>
+                </Link>
+
+                <span
+                  style={tripAddHint}
+                >
+                  保存しなくても
+                  <br />
+                  旅の予定に追加できます。
+                </span>
+              </div>
 
               {/* 保存 */}
 
@@ -2323,6 +2419,15 @@ const author: CSSProperties = {
   fontSize: "11px",
 };
 
+const authorAvatarImage: CSSProperties = {
+  width: "31px",
+  height: "31px",
+  borderRadius: "50%",
+  objectFit: "cover",
+  display: "block",
+  background: "#DFEAE3",
+};
+
 const avatar: CSSProperties = {
   width: "31px",
   height: "31px",
@@ -2630,6 +2735,40 @@ const reactionChecked: CSSProperties = {
 };
 
 /* =========================================================
+   TRIP ADD
+========================================================= */
+
+const tripAddRow: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "14px",
+  marginTop: "13px",
+};
+
+const tripAddButton: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "8px",
+  minWidth: "138px",
+  height: "42px",
+  padding: "0 15px",
+  border: "1px solid #9DB9AA",
+  borderRadius: "999px",
+  background: "#173F30",
+  color: "#fff",
+  textDecoration: "none",
+  fontSize: "10px",
+  fontWeight: 700,
+};
+
+const tripAddHint: CSSProperties = {
+  color: "#929F99",
+  fontSize: "8px",
+  lineHeight: 1.6,
+};
+
+/* =========================================================
    SAVE
 ========================================================= */
 
@@ -2689,6 +2828,20 @@ const ownerActionRow: CSSProperties = {
   alignItems: "center",
   gap: "12px",
   marginBottom: "22px",
+};
+
+const editButton: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "9px 13px",
+  borderRadius: "999px",
+  border: "1px solid #B9CBC1",
+  background: "#EDF5F0",
+  color: "#355A48",
+  textDecoration: "none",
+  fontSize: "9px",
+  fontWeight: 700,
 };
 
 const deleteButton: CSSProperties = {
