@@ -3,40 +3,62 @@ import ClientLayout from "./ClientLayout";
 
 export const metadata = {
   title: {
-    default: "IZUscape | 偶然の出会いを旅する",
+    default: "IZUscape | 体験から、次の旅を見つける",
     template: "%s | IZUscape",
   },
 
   description:
-    "IZUscapeは、伊豆の偶然の出会いを体験でつなぐ旅アプリ。観光地だけじゃない、誰かのリアルな旅の記録から新しい発見を楽しもう。",
+    "IZUscapeは、「やってみたいこと」や「過ごしたい時間」から旅や場所を見つける体験共有サービス。実際に訪れた人の記録から、新しい場所や過ごし方を見つけよう。",
 
   keywords: [
-    "伊豆",
-    "観光",
+    "IZUscape",
+    "体験",
+    "旅",
     "旅行",
+    "おでかけ",
+    "観光",
     "体験共有",
-    "旅アプリ",
-    "カフェ",
+    "旅行記",
+    "旅の記録",
+    "おすすめスポット",
+    "場所探し",
+    "おでかけスポット",
+    "観光スポット",
+    "旅行スポット",
+    "旅先",
+    "自然",
     "グルメ",
-    "下田",
-    "熱海",
-    "伊東",
-    "伊豆市",
-    "伊豆の国市",
-    "修善寺",
-    "伊豆長岡",
+    "カフェ",
+    "温泉",
+    "伊豆",
   ],
 
+  metadataBase: new URL(
+    "https://iz-uscape.vercel.app"
+  ),
+
+  alternates: {
+    canonical: "/",
+  },
+
+  robots: {
+    index: true,
+    follow: true,
+  },
+
   openGraph: {
-    title: "IZUscape | 偶然の出会いを旅する",
+    title:
+      "IZUscape | 体験から、次の旅を見つける",
 
     description:
-      "伊豆の偶然の出会いを体験でつなぐ、新しい旅アプリ。",
+      "「やってみたいこと」や「過ごしたい時間」から旅や場所を見つける体験共有サービス。実際に訪れた人の記録から、新しい発見を楽しもう。",
 
-    url: "https://iz-uscape.vercel.app",
+    url: "https://iz-uscape.vercel.app/",
 
     siteName: "IZUscape",
+
     locale: "ja_JP",
+
     type: "website",
 
     images: [
@@ -44,7 +66,7 @@ export const metadata = {
         url: "/ogp.png",
         width: 1200,
         height: 630,
-        alt: "IZUscape",
+        alt: "IZUscape | 体験から、次の旅を見つける",
       },
     ],
   },
@@ -52,9 +74,11 @@ export const metadata = {
   twitter: {
     card: "summary_large_image",
 
-    title: "IZUscape | 偶然の出会いを旅する",
+    title:
+      "IZUscape | 体験から、次の旅を見つける",
 
-    description: "伊豆の体験を共有する新しい旅アプリ",
+    description:
+      "「やってみたいこと」から旅や場所を見つける体験共有サービス。",
 
     images: ["/ogp.png"],
   },

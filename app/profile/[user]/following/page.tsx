@@ -40,29 +40,45 @@ export default function FollowingPage() {
 
         const snap = await getDocs(q);
 
-        const followingIds = snap.docs.map(
-          (d) => d.data().followingId as string
-        );
+        const followingIds = snap.docs
+          .map(
+            (d) => d.data().followingId as string
+          )
+          .filter(Boolean);
 
         const results = await Promise.all(
           followingIds.map(async (id) => {
-            const userSnap = await getDoc(
-              doc(db, "users", id)
-            );
+            try {
+              const userSnap = await getDoc(
+                doc(db, "users", id)
+              );
 
-            if (!userSnap.exists()) {
+              if (!userSnap.exists()) {
+                return {
+                  id,
+                  name: "ユーザー",
+                  bio: "",
+                  avatarUrl: "",
+                };
+              }
+
+              return {
+                id,
+                ...userSnap.data(),
+              } as UserData;
+            } catch (error) {
+              console.error(
+                "[IZUscape] ユーザー情報取得失敗:",
+                error
+              );
+
               return {
                 id,
                 name: "ユーザー",
                 bio: "",
-                avatarUrl: "/default.png",
+                avatarUrl: "",
               };
             }
-
-            return {
-              id,
-              ...userSnap.data(),
-            } as UserData;
           })
         );
 
@@ -104,7 +120,7 @@ export default function FollowingPage() {
         )}
       </div>
 
-      {/* 読み込み */}
+      {/* 読み込み中 */}
       {loading && (
         <div style={empty}>
           <p style={emptyTitle}>
@@ -141,19 +157,23 @@ export default function FollowingPage() {
             >
               <article style={userCard}>
 
-                <img
-                  src={
-                    u.avatarUrl ||
-                    "/default.png"
-                  }
-                  alt=""
-                  style={avatar}
-                />
+                {/* プロフィール画像 */}
+                {u.avatarUrl ? (
+                  <img
+                    src={u.avatarUrl}
+                    alt={u.name || "ユーザー"}
+                    style={avatar}
+                  />
+                ) : (
+                  <div style={defaultAvatar}>
+                    {(u.name || "ユーザー").slice(0, 1)}
+                  </div>
+                )}
 
+                {/* ユーザー情報 */}
                 <div style={userInfo}>
                   <p style={name}>
-                    {u.name ||
-                      "ユーザー"}
+                    {u.name || "ユーザー"}
                   </p>
 
                   {u.bio && (
@@ -163,6 +183,7 @@ export default function FollowingPage() {
                   )}
                 </div>
 
+                {/* 矢印 */}
                 <span style={arrow}>
                   ›
                 </span>
@@ -240,6 +261,22 @@ const avatar = {
   borderRadius: "50%",
   objectFit: "cover" as const,
   flexShrink: 0,
+  display: "block",
+  background: "#DFEAE3",
+};
+
+const defaultAvatar = {
+  width: "48px",
+  height: "48px",
+  borderRadius: "50%",
+  flexShrink: 0,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  background: "#DFEAE3",
+  color: "#567062",
+  fontSize: "18px",
+  fontWeight: "700",
 };
 
 const userInfo = {
@@ -252,6 +289,9 @@ const name = {
   fontSize: "14px",
   fontWeight: "700",
   color: "#26352E",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap" as const,
 };
 
 const bio = {
@@ -266,6 +306,7 @@ const bio = {
 const arrow = {
   fontSize: "22px",
   color: "#A0AAA5",
+  flexShrink: 0,
 };
 
 const empty = {

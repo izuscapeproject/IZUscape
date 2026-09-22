@@ -127,7 +127,6 @@ export default function ClientLayout({
             aria-label="メインナビゲーション"
           >
 
-
             {/* 保存 */}
 
             {user && (
@@ -228,9 +227,9 @@ export default function ClientLayout({
 
           </nav>
 
-          {/* =================================
+          {/* =====================================
               MOBILE MENU BUTTON
-          ================================= */}
+          ===================================== */}
 
           <button
             type="button"
@@ -280,24 +279,12 @@ export default function ClientLayout({
               aria-label="モバイルナビゲーション"
             >
 
-              {/* 探す */}
-
-              <Link href="/area/shimoda">
-                <span>
-                  思い出を探す
-                </span>
-
-                <span>
-                  ↗
-                </span>
-              </Link>
-
-              {/* 保存 */}
+              {/* また見たい記録 */}
 
               {user && (
                 <Link href="/saved">
                   <span>
-                    保存した思い出
+                    また見たい記録
                   </span>
 
                   <span>

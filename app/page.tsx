@@ -1727,15 +1727,17 @@ export default function Home() {
                   )}
                 </span>
 
-                <strong>
-                  {scoredPosts[0]
-                    ?.score ?? 88}
-                  %
-                  <small>
-                    {" "}
-                    おすすめ
-                  </small>
-                </strong>
+                {hasSearchCondition && (
+                  <strong>
+                    {scoredPosts[0]
+                      ?.score ?? 0}
+                    %
+                    <small>
+                      {" "}
+                      条件一致率
+                    </small>
+                  </strong>
+                )}
 
               </div>
 
@@ -1928,9 +1930,11 @@ export default function Home() {
                         )}
                       </span>
 
-                      <span className="izu-score">
-                        {score}%
-                      </span>
+                      {hasSearchCondition && (
+                        <span className="izu-score">
+                          {score}%
+                        </span>
+                      )}
 
                     </Link>
 
@@ -1939,9 +1943,9 @@ export default function Home() {
                       <div className="izu-place-meta">
 
                         <span>
-                          おすすめ{" "}
-                          {index +
-                            1}
+                          {hasSearchCondition
+                            ? `検索結果 ${index + 1}`
+                            : `おすすめ ${index + 1}`}
                         </span>
 
                         <span>
