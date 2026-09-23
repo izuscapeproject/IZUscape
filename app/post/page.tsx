@@ -1,75 +1,28 @@
 "use client";
 
-import {
-  useEffect,
-  useState,
-} from "react";
-
+import { useState } from "react";
 import Link from "next/link";
-import {
-  useParams,
-  useRouter,
-} from "next/navigation";
+import { useRouter } from "next/navigation";
 
+import { db, auth } from "@/lib/firebase";
 import {
-  onAuthStateChanged,
-} from "firebase/auth";
-
-import {
-  doc,
-  getDoc,
-  updateDoc,
+  collection,
+  addDoc,
 } from "firebase/firestore";
 
-import {
-  db,
-  auth,
-} from "@/lib/firebase";
+import { slugify } from "@/lib/slugify";
 
 type PostType = "trip" | "spot";
-
-type MainImage = {
-  url: string;
-  file: File | null;
-  preview: string;
-  isNew: boolean;
-};
 
 type Spot = {
   name: string;
   content: string;
-  imageUrl: string;
   file: File | null;
   preview: string;
-  isNewImage: boolean;
 };
 
-export default function PostEditPage() {
+export default function PostPage() {
   const router = useRouter();
-  const params = useParams();
-
-  const postId =
-    typeof params.id === "string"
-      ? params.id
-      : Array.isArray(params.id)
-      ? params.id[0]
-      : "";
-
-  //////////////////////////////////////////////////
-  // 基本状態
-  //////////////////////////////////////////////////
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const [saving, setSaving] =
-    useState(false);
-
-  const [showToast, setShowToast] =
-    useState(false);
-
-  const [error, setError] =
-    useState("");
 
   //////////////////////////////////////////////////
   // 投稿タイプ
@@ -94,12 +47,21 @@ export default function PostEditPage() {
   const [intro, setIntro] =
     useState("");
 
+  const [loading, setLoading] =
+    useState(false);
+
+  const [showToast, setShowToast] =
+    useState(false);
+
   //////////////////////////////////////////////////
   // メイン写真
   //////////////////////////////////////////////////
 
   const [images, setImages] =
-    useState<MainImage[]>([]);
+    useState<File[]>([]);
+
+  const [preview, setPreview] =
+    useState<string[]>([]);
 
   const MAX_IMAGES = 10;
 
@@ -115,7 +77,9 @@ export default function PostEditPage() {
     ]);
 
   //////////////////////////////////////////////////
-  // スポット
+  // 訪れた場所
+  //
+  // 最初は1個だけ
   //////////////////////////////////////////////////
 
   const [spots, setSpots] =
@@ -123,10 +87,8 @@ export default function PostEditPage() {
       {
         name: "",
         content: "",
-        imageUrl: "",
         file: null,
         preview: "",
-        isNewImage: false,
       },
     ]);
 
@@ -241,397 +203,20 @@ export default function PostEditPage() {
   ];
 
   //////////////////////////////////////////////////
-  // 投稿読み込み
-  //////////////////////////////////////////////////
-
-  useEffect(() => {
-    if (!postId) {
-      return;
-    }
-
-    let cancelled = false;
-
-    const unsubscribe =
-      onAuthStateChanged(
-        auth,
-        async (user) => {
-          if (!user) {
-            if (!cancelled) {
-              setError(
-                "編集するにはログインしてください。"
-              );
-              setLoading(false);
-            }
-
-            return;
-          }
-
-          try {
-            const postRef =
-              doc(
-                db,
-                "posts",
-                postId
-              );
-
-            const snapshot =
-              await getDoc(
-                postRef
-              );
-
-            if (!snapshot.exists()) {
-              if (!cancelled) {
-                setError(
-                  "投稿が見つかりません。"
-                );
-                setLoading(false);
-              }
-
-              return;
-            }
-
-            const data =
-              snapshot.data();
-
-            //////////////////////////////////////////////////
-            // 所有者確認
-            //////////////////////////////////////////////////
-
-            if (
-              data.userId !==
-              user.uid
-            ) {
-              if (!cancelled) {
-                setError(
-                  "この投稿を編集する権限がありません。"
-                );
-                setLoading(false);
-              }
-
-              return;
-            }
-
-            //////////////////////////////////////////////////
-            // 基本情報
-            //////////////////////////////////////////////////
-
-            if (
-              data.postType ===
-              "trip" ||
-              data.postType ===
-              "spot"
-            ) {
-              setPostType(
-                data.postType
-              );
-            }
-
-            setTitle(
-              typeof data.title ===
-                "string"
-                ? data.title
-                : ""
-            );
-
-            setArea(
-              typeof data.area ===
-                "string"
-                ? data.area
-                : "shimoda"
-            );
-
-            setIntro(
-              typeof data.intro ===
-                "string"
-                ? data.intro
-                : ""
-            );
-
-            //////////////////////////////////////////////////
-            // タグ
-            //////////////////////////////////////////////////
-
-            if (
-              Array.isArray(
-                data.tags
-              )
-            ) {
-              setTags(
-                data.tags
-                  .filter(
-                    (tag: unknown) =>
-                      typeof tag ===
-                      "string"
-                  )
-                  .join(", ")
-              );
-            }
-
-            //////////////////////////////////////////////////
-            // 条件
-            //////////////////////////////////////////////////
-
-            if (
-              Array.isArray(
-                data.conditions
-              )
-            ) {
-              setConditions(
-                data.conditions.filter(
-                  (condition: unknown) =>
-                    typeof condition ===
-                    "string"
-                )
-              );
-            }
-
-            //////////////////////////////////////////////////
-            // メイン写真
-            //////////////////////////////////////////////////
-
-            if (
-              Array.isArray(
-                data.images
-              )
-            ) {
-              const loadedImages =
-                data.images
-                  .filter(
-                    (url: unknown) =>
-                      typeof url ===
-                      "string" &&
-                      url.length > 0
-                  )
-                  .map(
-                    (url: string) => ({
-                      url,
-                      file: null,
-                      preview: url,
-                      isNew: false,
-                    })
-                  );
-
-              setImages(
-                loadedImages
-              );
-            }
-
-            //////////////////////////////////////////////////
-            // 旅の内容
-            //////////////////////////////////////////////////
-
-            if (
-              Array.isArray(
-                data.contents
-              )
-            ) {
-              const loadedContents =
-                data.contents
-                  .filter(
-                    (content: unknown) =>
-                      typeof content ===
-                      "string"
-                  )
-                  .slice(0, 3);
-
-              while (
-                loadedContents.length <
-                3
-              ) {
-                loadedContents.push(
-                  ""
-                );
-              }
-
-              setContents(
-                loadedContents
-              );
-            }
-
-            //////////////////////////////////////////////////
-            // スポット
-            //////////////////////////////////////////////////
-
-            const loadedSpots: Spot[] =
-              [];
-
-            if (
-              Array.isArray(
-                data.spots
-              )
-            ) {
-              data.spots.forEach(
-                (spot: any) => {
-                  if (
-                    !spot ||
-                    typeof spot !==
-                      "object"
-                  ) {
-                    return;
-                  }
-
-                  loadedSpots.push({
-                    name:
-                      typeof spot.name ===
-                      "string"
-                        ? spot.name
-                        : "",
-
-                    content:
-                      typeof spot.content ===
-                      "string"
-                        ? spot.content
-                        : "",
-
-                    imageUrl:
-                      typeof spot.imageUrl ===
-                      "string"
-                        ? spot.imageUrl
-                        : "",
-
-                    file: null,
-
-                    preview:
-                      typeof spot.imageUrl ===
-                      "string"
-                        ? spot.imageUrl
-                        : "",
-
-                    isNewImage: false,
-                  });
-                }
-              );
-            }
-
-            //////////////////////////////////////////////////
-            // 旧データとの互換
-            //////////////////////////////////////////////////
-
-            if (
-              loadedSpots.length === 0 &&
-              Array.isArray(
-                data.spotNames
-              )
-            ) {
-              const oldNames =
-                data.spotNames;
-
-              const oldImages =
-                Array.isArray(
-                  data.spotImages
-                )
-                  ? data.spotImages
-                  : [];
-
-              oldNames.forEach(
-                (
-                  name: unknown,
-                  index: number
-                ) => {
-                  const image =
-                    typeof oldImages[
-                      index
-                    ] === "string"
-                      ? oldImages[
-                          index
-                        ]
-                      : "";
-
-                  loadedSpots.push({
-                    name:
-                      typeof name ===
-                      "string"
-                        ? name
-                        : "",
-
-                    content: "",
-
-                    imageUrl: image,
-
-                    file: null,
-
-                    preview: image,
-
-                    isNewImage: false,
-                  });
-                }
-              );
-            }
-
-            //////////////////////////////////////////////////
-            // スポットがなければ1個用意
-            //////////////////////////////////////////////////
-
-            if (
-              loadedSpots.length ===
-              0
-            ) {
-              loadedSpots.push({
-                name: "",
-                content: "",
-                imageUrl: "",
-                file: null,
-                preview: "",
-                isNewImage: false,
-              });
-            }
-
-            setSpots(
-              loadedSpots.slice(
-                0,
-                MAX_SPOTS
-              )
-            );
-
-            if (!cancelled) {
-              setLoading(false);
-            }
-          } catch (err) {
-            console.error(
-              "投稿読み込みエラー:",
-              err
-            );
-
-            if (!cancelled) {
-              setError(
-                "投稿の読み込みに失敗しました。"
-              );
-              setLoading(false);
-            }
-          }
-        }
-      );
-
-    return () => {
-      cancelled = true;
-      unsubscribe();
-    };
-  }, [postId]);
-
-  //////////////////////////////////////////////////
   // タグ追加
   //////////////////////////////////////////////////
 
-  const addTag = (
-    tag: string
-  ) => {
-    const currentTags =
-      tags
-        .split(",")
-        .map((item) =>
-          item.trim()
-        )
-        .filter(Boolean);
+  const addTag = (tag: string) => {
+    const currentTags = tags
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
 
-    if (
-      currentTags.includes(tag)
-    ) {
+    if (currentTags.includes(tag)) {
       return;
     }
 
-    if (
-      currentTags.length === 0
-    ) {
+    if (currentTags.length === 0) {
       setTags(tag);
       return;
     }
@@ -648,30 +233,25 @@ export default function PostEditPage() {
   const toggleCondition = (
     condition: string
   ) => {
-    setConditions(
-      (current) => {
-        if (
-          current.includes(
-            condition
-          )
-        ) {
-          return current.filter(
-            (item) =>
-              item !==
-              condition
-          );
-        }
-
-        return [
-          ...current,
-          condition,
-        ];
+    setConditions((current) => {
+      if (
+        current.includes(condition)
+      ) {
+        return current.filter(
+          (item) =>
+            item !== condition
+        );
       }
-    );
+
+      return [
+        ...current,
+        condition,
+      ];
+    });
   };
 
   //////////////////////////////////////////////////
-  // 投稿タイプ
+  // 投稿タイプ変更
   //////////////////////////////////////////////////
 
   const changePostType = (
@@ -688,11 +268,10 @@ export default function PostEditPage() {
     files: File[]
   ) => {
     const imageFiles =
-      files.filter(
-        (file) =>
-          file.type.startsWith(
-            "image/"
-          )
+      files.filter((file) =>
+        file.type.startsWith(
+          "image/"
+        )
       );
 
     if (
@@ -702,12 +281,9 @@ export default function PostEditPage() {
     }
 
     const remaining =
-      MAX_IMAGES -
-      images.length;
+      MAX_IMAGES - images.length;
 
-    if (
-      remaining <= 0
-    ) {
+    if (remaining <= 0) {
       alert(
         `写真は最大${MAX_IMAGES}枚までです`
       );
@@ -720,25 +296,22 @@ export default function PostEditPage() {
         remaining
       );
 
-    const newImages =
-      selected.map(
-        (file) => ({
-          url: "",
-          file,
-          preview:
-            URL.createObjectURL(
-              file
-            ),
-          isNew: true,
-        })
+    const newPreviews =
+      selected.map((file) =>
+        URL.createObjectURL(
+          file
+        )
       );
 
-    setImages(
-      (current) => [
-        ...current,
-        ...newImages,
-      ]
-    );
+    setImages((current) => [
+      ...current,
+      ...selected,
+    ]);
+
+    setPreview((current) => [
+      ...current,
+      ...newPreviews,
+    ]);
   };
 
   //////////////////////////////////////////////////
@@ -748,26 +321,26 @@ export default function PostEditPage() {
   const removeImage = (
     index: number
   ) => {
-    setImages(
-      (current) => {
-        const target =
-          current[index];
+    setImages((current) =>
+      current.filter(
+        (_, i) => i !== index
+      )
+    );
 
-        if (
-          target?.isNew &&
-          target.preview
-        ) {
-          URL.revokeObjectURL(
-            target.preview
-          );
-        }
+    setPreview((current) => {
+      const target =
+        current[index];
 
-        return current.filter(
-          (_, i) =>
-            i !== index
+      if (target) {
+        URL.revokeObjectURL(
+          target
         );
       }
-    );
+
+      return current.filter(
+        (_, i) => i !== index
+      );
+    });
   };
 
   //////////////////////////////////////////////////
@@ -777,10 +350,9 @@ export default function PostEditPage() {
   const handleImageChange = (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
-    const files =
-      Array.from(
-        e.target.files || []
-      );
+    const files = Array.from(
+      e.target.files || []
+    );
 
     addImages(files);
 
@@ -795,18 +367,13 @@ export default function PostEditPage() {
     index: number,
     value: string
   ) => {
-    setContents(
-      (current) => {
-        const copy = [
-          ...current,
-        ];
+    setContents((current) => {
+      const copy = [...current];
 
-        copy[index] =
-          value;
+      copy[index] = value;
 
-        return copy;
-      }
-    );
+      return copy;
+    });
   };
 
   //////////////////////////////////////////////////
@@ -815,25 +382,19 @@ export default function PostEditPage() {
 
   const handleSpotChange = (
     index: number,
-    key:
-      | "name"
-      | "content",
+    key: "name" | "content",
     value: string
   ) => {
-    setSpots(
-      (current) => {
-        const copy = [
-          ...current,
-        ];
+    setSpots((current) => {
+      const copy = [...current];
 
-        copy[index] = {
-          ...copy[index],
-          [key]: value,
-        };
+      copy[index] = {
+        ...copy[index],
+        [key]: value,
+      };
 
-        return copy;
-      }
-    );
+      return copy;
+    });
   };
 
   //////////////////////////////////////////////////
@@ -842,8 +403,7 @@ export default function PostEditPage() {
 
   const addSpot = () => {
     if (
-      spots.length >=
-      MAX_SPOTS
+      spots.length >= MAX_SPOTS
     ) {
       alert(
         `スポットは最大${MAX_SPOTS}か所まで追加できます`
@@ -851,19 +411,15 @@ export default function PostEditPage() {
       return;
     }
 
-    setSpots(
-      (current) => [
-        ...current,
-        {
-          name: "",
-          content: "",
-          imageUrl: "",
-          file: null,
-          preview: "",
-          isNewImage: false,
-        },
-      ]
-    );
+    setSpots((current) => [
+      ...current,
+      {
+        name: "",
+        content: "",
+        file: null,
+        preview: "",
+      },
+    ]);
   };
 
   //////////////////////////////////////////////////
@@ -873,29 +429,14 @@ export default function PostEditPage() {
   const removeSpot = (
     index: number
   ) => {
-    if (
-      spots.length === 1
-    ) {
-      const target =
-        spots[0];
-
-      if (
-        target.isNewImage &&
-        target.preview
-      ) {
-        URL.revokeObjectURL(
-          target.preview
-        );
-      }
-
+    // 最後の1個は残す
+    if (spots.length === 1) {
       setSpots([
         {
           name: "",
           content: "",
-          imageUrl: "",
           file: null,
           preview: "",
-          isNewImage: false,
         },
       ]);
 
@@ -905,26 +446,21 @@ export default function PostEditPage() {
     const target =
       spots[index];
 
-    if (
-      target?.isNewImage &&
-      target.preview
-    ) {
+    if (target.preview) {
       URL.revokeObjectURL(
         target.preview
       );
     }
 
-    setSpots(
-      (current) =>
-        current.filter(
-          (_, i) =>
-            i !== index
-        )
+    setSpots((current) =>
+      current.filter(
+        (_, i) => i !== index
+      )
     );
   };
 
   //////////////////////////////////////////////////
-  // スポット画像変更
+  // スポット画像
   //////////////////////////////////////////////////
 
   const handleSpotImageChange = (
@@ -946,43 +482,31 @@ export default function PostEditPage() {
       alert(
         "画像ファイルを選択してください"
       );
-
-      e.target.value = "";
       return;
     }
 
-    setSpots(
-      (current) => {
-        const copy = [
-          ...current,
-        ];
+    setSpots((current) => {
+      const copy = [...current];
 
-        const old =
-          copy[index];
-
-        if (
-          old.isNewImage &&
-          old.preview
-        ) {
-          URL.revokeObjectURL(
-            old.preview
-          );
-        }
-
-        copy[index] = {
-          ...old,
-          imageUrl: "",
-          file,
-          preview:
-            URL.createObjectURL(
-              file
-            ),
-          isNewImage: true,
-        };
-
-        return copy;
+      if (
+        copy[index].preview
+      ) {
+        URL.revokeObjectURL(
+          copy[index].preview
+        );
       }
-    );
+
+      copy[index] = {
+        ...copy[index],
+        file,
+        preview:
+          URL.createObjectURL(
+            file
+          ),
+      };
+
+      return copy;
+    });
 
     e.target.value = "";
   };
@@ -994,45 +518,35 @@ export default function PostEditPage() {
   const removeSpotImage = (
     index: number
   ) => {
-    setSpots(
-      (current) => {
-        const copy = [
-          ...current,
-        ];
+    setSpots((current) => {
+      const copy = [...current];
 
-        const old =
-          copy[index];
-
-        if (
-          old.isNewImage &&
-          old.preview
-        ) {
-          URL.revokeObjectURL(
-            old.preview
-          );
-        }
-
-        copy[index] = {
-          ...old,
-          imageUrl: "",
-          file: null,
-          preview: "",
-          isNewImage: false,
-        };
-
-        return copy;
+      if (
+        copy[index].preview
+      ) {
+        URL.revokeObjectURL(
+          copy[index].preview
+        );
       }
-    );
+
+      copy[index] = {
+        ...copy[index],
+        file: null,
+        preview: "",
+      };
+
+      return copy;
+    });
   };
 
   //////////////////////////////////////////////////
-  // Cloudinaryアップロード
+  // Cloudinary
   //////////////////////////////////////////////////
 
   const uploadToCloudinary =
     async (
       file: File
-    ): Promise<string> => {
+    ) => {
       const formData =
         new FormData();
 
@@ -1064,36 +578,18 @@ export default function PostEditPage() {
       const data =
         await res.json();
 
-      if (
-        !data.secure_url
-      ) {
-        throw new Error(
-          "画像URLを取得できませんでした"
-        );
-      }
-
       return data.secure_url;
     };
 
   //////////////////////////////////////////////////
-  // 編集保存
+  // 投稿
   //////////////////////////////////////////////////
 
-  const handleSave =
+  const handlePost =
     async () => {
-      const user =
-        auth.currentUser;
-
-      if (!user) {
+      if (!auth.currentUser) {
         alert(
           "ログインしてください"
-        );
-        return;
-      }
-
-      if (!postId) {
-        alert(
-          "投稿IDが見つかりません"
         );
         return;
       }
@@ -1111,81 +607,30 @@ export default function PostEditPage() {
         images.length === 0
       ) {
         alert(
-          "写真を最低1枚残してください"
+          "写真を最低1枚追加してください"
         );
         return;
       }
 
-      //////////////////////////////////////////////////
-      // 二重チェック
-      //////////////////////////////////////////////////
+      setLoading(true);
 
       try {
-        const postRef =
-          doc(
-            db,
-            "posts",
-            postId
-          );
-
-        const currentSnapshot =
-          await getDoc(
-            postRef
-          );
-
-        if (
-          !currentSnapshot.exists()
-        ) {
-          alert(
-            "投稿が見つかりません"
-          );
-          return;
-        }
-
-        const currentData =
-          currentSnapshot.data();
-
-        if (
-          currentData.userId !==
-          user.uid
-        ) {
-          alert(
-            "この投稿を編集する権限がありません"
-          );
-          return;
-        }
-
-        setSaving(true);
-
         //////////////////////////////////////////////////
-        // メイン写真
+        // メイン写真アップロード
         //////////////////////////////////////////////////
 
         const imageUrls: string[] =
           [];
 
         for (
-          const image of images
+          const file of images
         ) {
-          if (
-            image.isNew &&
-            image.file
-          ) {
-            const url =
-              await uploadToCloudinary(
-                image.file
-              );
+          const url =
+            await uploadToCloudinary(
+              file
+            );
 
-            imageUrls.push(
-              url
-            );
-          } else if (
-            image.url
-          ) {
-            imageUrls.push(
-              image.url
-            );
-          }
+          imageUrls.push(url);
         }
 
         //////////////////////////////////////////////////
@@ -1207,21 +652,15 @@ export default function PostEditPage() {
             const hasContent =
               spot.name.trim() ||
               spot.content.trim() ||
-              spot.file ||
-              spot.imageUrl;
+              spot.file;
 
-            if (
-              !hasContent
-            ) {
+            if (!hasContent) {
               continue;
             }
 
-            let imageUrl =
-              spot.imageUrl;
+            let imageUrl = "";
 
-            if (
-              spot.file
-            ) {
+            if (spot.file) {
               imageUrl =
                 await uploadToCloudinary(
                   spot.file
@@ -1231,12 +670,9 @@ export default function PostEditPage() {
             uploadedSpots.push({
               name:
                 spot.name.trim(),
-
               content:
                 spot.content.trim(),
-
-              imageUrl:
-                imageUrl || "",
+              imageUrl,
             });
           }
         }
@@ -1246,52 +682,71 @@ export default function PostEditPage() {
         //////////////////////////////////////////////////
 
         const tagArray =
-          tags
-            .trim()
+          tags.trim()
             ? tags
                 .split(",")
-                .map(
-                  (tag) =>
-                    tag.trim()
+                .map((tag) =>
+                  tag.trim()
                 )
-                .filter(
-                  Boolean
-                )
+                .filter(Boolean)
             : ["体験"];
 
         //////////////////////////////////////////////////
-        // Firestore更新
+        // slug
         //////////////////////////////////////////////////
 
-        await updateDoc(
-          postRef,
+        let slug =
+          slugify(
+            title,
+            area
+          );
+
+        slug =
+          `${slug}-${Date.now()}`;
+
+        //////////////////////////////////////////////////
+        // Firestore
+        //////////////////////////////////////////////////
+
+        await addDoc(
+          collection(
+            db,
+            "posts"
+          ),
           {
+            // 投稿タイプ
             postType,
 
+            // 基本情報
             title:
               title.trim(),
 
             area,
 
+            slug,
+
+            // メイン写真
             images:
               imageUrls,
 
+            // 説明
             intro:
               intro.trim(),
 
+            // 旅の内容
             contents:
               postType === "trip"
-                ? contents
-                    .map(
-                      (content) =>
-                        content.trim()
-                    )
-                    .filter(Boolean)
+                ? contents.filter(
+                    (content) =>
+                      content.trim()
+                  )
                 : [],
 
+            // 訪れた場所
             spots:
               uploadedSpots,
 
+            // 旧データとの互換用
             spotNames:
               uploadedSpots.map(
                 (spot) =>
@@ -1306,10 +761,32 @@ export default function PostEditPage() {
                 )
                 .filter(Boolean),
 
+            // タグ
             tags:
               tagArray,
 
+            // 条件
             conditions,
+
+            // リアクション
+            reactions: {
+              want: 0,
+              same: 0,
+              nice: 0,
+            },
+
+            // ユーザー
+            userId:
+              auth.currentUser
+                .uid,
+
+            userName:
+              auth.currentUser
+                .displayName ||
+              "匿名",
+
+            createdAt:
+              new Date(),
           }
         );
 
@@ -1320,141 +797,59 @@ export default function PostEditPage() {
         setShowToast(true);
 
         setTimeout(() => {
-          router.push(
-            `/experience/${postId}`
-          );
-        }, 1200);
-      } catch (err) {
+          router.push("/");
+        }, 1800);
+      } catch (error) {
         console.error(
-          "投稿編集エラー:",
-          err
+          "投稿エラー:",
+          error
         );
 
         alert(
-          "投稿の更新に失敗しました"
+          "投稿に失敗しました"
         );
       } finally {
-        setSaving(false);
+        setLoading(false);
       }
     };
-
-  //////////////////////////////////////////////////
-  // ローディング
-  //////////////////////////////////////////////////
-
-  if (loading) {
-    return (
-      <main
-        style={container}
-      >
-        <Link
-          href="/"
-          style={back}
-        >
-          ← ホームに戻る
-        </Link>
-
-        <div
-          style={
-            loadingBox
-          }
-        >
-          投稿を読み込んでいます…
-        </div>
-      </main>
-    );
-  }
-
-  //////////////////////////////////////////////////
-  // エラー
-  //////////////////////////////////////////////////
-
-  if (error) {
-    return (
-      <main
-        style={container}
-      >
-        <Link
-          href="/"
-          style={back}
-        >
-          ← ホームに戻る
-        </Link>
-
-        <div
-          style={errorBox}
-        >
-          <h1
-            style={errorTitle}
-          >
-            編集できません
-          </h1>
-
-          <p
-            style={errorText}
-          >
-            {error}
-          </p>
-
-          <button
-            type="button"
-            onClick={() =>
-              router.back()
-            }
-            style={backButton}
-          >
-            戻る
-          </button>
-        </div>
-      </main>
-    );
-  }
 
   //////////////////////////////////////////////////
   // 表示
   //////////////////////////////////////////////////
 
   return (
-    <main
-      style={container}
-    >
-      {/* 戻る */}
+    <main style={container}>
 
+      {/* 戻る */}
       <Link
-        href={`/experience/${postId}`}
+        href="/"
         style={back}
       >
-        ← 投稿に戻る
+        ← ホームに戻る
       </Link>
 
       {/* ========================================
           HEADER
       ======================================== */}
 
-      <div
-        style={guideBox}
-      >
-        <p
-          style={guideMini}
-        >
-          EDIT
+      <div style={guideBox}>
+
+        <p style={guideMini}>
+          CREATE
         </p>
 
-        <h1
-          style={pageTitle}
-        >
+        <h1 style={pageTitle}>
           {postType === "trip"
-            ? "旅を編集する"
-            : "場所を編集する"}
+            ? "旅を記録する"
+            : "場所を紹介する"}
         </h1>
 
-        <p
-          style={guideText}
-        >
-          投稿した内容を編集できます。
-          <br />
-          写真や文章を変更して、最新の旅を残そう。
+        <p style={guideText}>
+          {postType === "trip"
+            ? "あなたの旅の思い出を、次の誰かの旅につなげよう。"
+            : "あなたが見つけたおすすめの場所を、次の誰かの旅につなげよう。"}
         </p>
+
       </div>
 
       {/* ========================================
@@ -1464,21 +859,19 @@ export default function PostEditPage() {
       <section
         style={typeSection}
       >
-        <p
-          style={sectionMini}
-        >
+
+        <p style={sectionMini}>
           POST TYPE
         </p>
 
-        <h2
-          style={sectionTitle}
-        >
+        <h2 style={sectionTitle}>
           何を投稿する？
         </h2>
 
         <div
           style={typeGrid}
         >
+
           <button
             type="button"
             onClick={() =>
@@ -1494,6 +887,7 @@ export default function PostEditPage() {
                 : {}),
             }}
           >
+
             <span
               style={typeIcon}
             >
@@ -1507,9 +901,7 @@ export default function PostEditPage() {
             </span>
 
             <span
-              style={
-                typeDescription
-              }
+              style={typeDescription}
             >
               複数の場所を巡った
               <br />
@@ -1519,13 +911,12 @@ export default function PostEditPage() {
             {postType ===
               "trip" && (
               <span
-                style={
-                  typeSelectedMark
-                }
+                style={typeSelectedMark}
               >
                 ✓ 選択中
               </span>
             )}
+
           </button>
 
           <button
@@ -1543,6 +934,7 @@ export default function PostEditPage() {
                 : {}),
             }}
           >
+
             <span
               style={typeIcon}
             >
@@ -1556,9 +948,7 @@ export default function PostEditPage() {
             </span>
 
             <span
-              style={
-                typeDescription
-              }
+              style={typeDescription}
             >
               おすすめしたい
               <br />
@@ -1568,15 +958,16 @@ export default function PostEditPage() {
             {postType ===
               "spot" && (
               <span
-                style={
-                  typeSelectedMark
-                }
+                style={typeSelectedMark}
               >
                 ✓ 選択中
               </span>
             )}
+
           </button>
+
         </div>
+
       </section>
 
       {/* ========================================
@@ -1586,12 +977,12 @@ export default function PostEditPage() {
       <section
         style={photoSection}
       >
+
         <div
           style={photoHeader}
         >
-          <p
-            style={photoMini}
-          >
+
+          <p style={photoMini}>
             {postType === "trip"
               ? "TRAVEL PHOTOS"
               : "PLACE PHOTOS"}
@@ -1608,26 +999,28 @@ export default function PostEditPage() {
           <p
             style={photoText}
           >
-            写真を削除したり、
-            新しい写真を追加できます。
+            {postType === "trip"
+              ? "この旅で撮った写真を追加してください。"
+              : "この場所の雰囲気が伝わる写真を追加してください。"}
             <br />
             1枚目の写真が表紙になります。
           </p>
+
         </div>
 
         <div
           style={photoGrid}
         >
-          {images.map(
-            (image, index) => (
+
+          {preview.map(
+            (src, index) => (
               <div
-                key={`${image.preview}-${index}`}
+                key={`${src}-${index}`}
                 style={photoItem}
               >
+
                 <img
-                  src={
-                    image.preview
-                  }
+                  src={src}
                   alt={`写真 ${
                     index + 1
                   }`}
@@ -1636,21 +1029,9 @@ export default function PostEditPage() {
 
                 {index === 0 && (
                   <span
-                    style={
-                      coverLabel
-                    }
+                    style={coverLabel}
                   >
                     表紙
-                  </span>
-                )}
-
-                {image.isNew && (
-                  <span
-                    style={
-                      newImageLabel
-                    }
-                  >
-                    新規
                   </span>
                 )}
 
@@ -1661,13 +1042,12 @@ export default function PostEditPage() {
                       index
                     )
                   }
-                  style={
-                    photoDelete
-                  }
+                  style={photoDelete}
                   aria-label="写真を削除"
                 >
                   ×
                 </button>
+
               </div>
             )
           )}
@@ -1677,6 +1057,7 @@ export default function PostEditPage() {
             <label
               style={photoAdd}
             >
+
               <span
                 style={
                   photoAddIcon
@@ -1706,13 +1087,16 @@ export default function PostEditPage() {
                   handleImageChange
                 }
               />
+
             </label>
           )}
+
         </div>
 
         <div
           style={photoFooter}
         >
+
           <span>
             {images.length} /{" "}
             {MAX_IMAGES} 枚
@@ -1721,10 +1105,12 @@ export default function PostEditPage() {
           {images.length ===
             0 && (
             <span>
-              写真を1枚以上残してください
+              写真を1枚以上追加してください
             </span>
           )}
+
         </div>
+
       </section>
 
       {/* ========================================
@@ -1734,15 +1120,12 @@ export default function PostEditPage() {
       <section
         style={formSection}
       >
-        <p
-          style={sectionMini}
-        >
+
+        <p style={sectionMini}>
           AREA
         </p>
 
-        <h2
-          style={sectionTitle}
-        >
+        <h2 style={sectionTitle}>
           {postType === "trip"
             ? "どこを旅した？"
             : "どこの場所？"}
@@ -1757,6 +1140,7 @@ export default function PostEditPage() {
           }
           style={input}
         >
+
           {areas.map(
             (item) => (
               <option
@@ -1767,7 +1151,9 @@ export default function PostEditPage() {
               </option>
             )
           )}
+
         </select>
+
       </section>
 
       {/* ========================================
@@ -1777,17 +1163,14 @@ export default function PostEditPage() {
       <section
         style={formSection}
       >
-        <p
-          style={sectionMini}
-        >
+
+        <p style={sectionMini}>
           {postType === "trip"
             ? "TITLE"
             : "PLACE NAME"}
         </p>
 
-        <h2
-          style={sectionTitle}
-        >
+        <h2 style={sectionTitle}>
           {postType === "trip"
             ? "旅にタイトルをつけよう"
             : "場所の名前"}
@@ -1807,6 +1190,7 @@ export default function PostEditPage() {
           }
           style={input}
         />
+
       </section>
 
       {/* ========================================
@@ -1816,17 +1200,14 @@ export default function PostEditPage() {
       <section
         style={formSection}
       >
-        <p
-          style={sectionMini}
-        >
+
+        <p style={sectionMini}>
           {postType === "trip"
             ? "STORY"
             : "ABOUT"}
         </p>
 
-        <h2
-          style={sectionTitle}
-        >
+        <h2 style={sectionTitle}>
           {postType === "trip"
             ? "どんな旅だった？"
             : "どんな場所？"}
@@ -1846,6 +1227,7 @@ export default function PostEditPage() {
           }
           style={textarea}
         />
+
       </section>
 
       {/* ========================================
@@ -1857,9 +1239,8 @@ export default function PostEditPage() {
         <section
           style={formSection}
         >
-          <p
-            style={sectionMini}
-          >
+
+          <p style={sectionMini}>
             MEMORIES
           </p>
 
@@ -1879,10 +1260,7 @@ export default function PostEditPage() {
           </p>
 
           {contents.map(
-            (
-              content,
-              index
-            ) => (
+            (content, index) => (
               <textarea
                 key={index}
                 placeholder={
@@ -1892,9 +1270,7 @@ export default function PostEditPage() {
                     ? "旅の中で何をした？"
                     : "誰かに伝えたいこと"
                 }
-                value={
-                  content
-                }
+                value={content}
                 onChange={(e) =>
                   handleContentChange(
                     index,
@@ -1907,6 +1283,7 @@ export default function PostEditPage() {
               />
             )
           )}
+
         </section>
       )}
 
@@ -1917,15 +1294,15 @@ export default function PostEditPage() {
       {postType ===
         "trip" && (
         <section
-          style={
-            spotsSection
-          }
+          style={spotsSection}
         >
+
           <div
             style={
               spotsHeader
             }
           >
+
             <div>
               <p
                 style={
@@ -1948,7 +1325,7 @@ export default function PostEditPage() {
                   sectionDescription
                 }
               >
-                この旅で立ち寄った場所を編集できます。
+                この旅で立ち寄った場所を追加できます。
               </p>
             </div>
 
@@ -1960,31 +1337,32 @@ export default function PostEditPage() {
               {spots.length} /{" "}
               {MAX_SPOTS}
             </div>
+
           </div>
+
+          {/* スポット一覧 */}
 
           <div
             style={
               spotsList
             }
           >
+
             {spots.map(
-              (
-                spot,
-                index
-              ) => (
+              (spot, index) => (
                 <div
                   key={index}
-                  style={
-                    spotCard
-                  }
+                  style={spotCard}
                 >
-                  {/* ヘッダー */}
+
+                  {/* スポットヘッダー */}
 
                   <div
                     style={
                       spotCardHeader
                     }
                   >
+
                     <div
                       style={
                         spotNumberCircle
@@ -2032,6 +1410,7 @@ export default function PostEditPage() {
                     >
                       削除
                     </button>
+
                   </div>
 
                   {/* 場所名 */}
@@ -2070,7 +1449,7 @@ export default function PostEditPage() {
                     }
                   />
 
-                  {/* 写真 */}
+                  {/* スポット写真 */}
 
                   {spot.preview ? (
                     <div
@@ -2078,6 +1457,7 @@ export default function PostEditPage() {
                         spotPhotoPreviewWrap
                       }
                     >
+
                       <img
                         src={
                           spot.preview
@@ -2087,16 +1467,6 @@ export default function PostEditPage() {
                           spotPhotoPreview
                         }
                       />
-
-                      {spot.isNewImage && (
-                        <span
-                          style={
-                            spotNewLabel
-                          }
-                        >
-                          新規
-                        </span>
-                      )}
 
                       <button
                         type="button"
@@ -2111,6 +1481,7 @@ export default function PostEditPage() {
                       >
                         写真を削除
                       </button>
+
                     </div>
                   ) : (
                     <label
@@ -2134,9 +1505,7 @@ export default function PostEditPage() {
                         type="file"
                         accept="image/*"
                         hidden
-                        onChange={(
-                          e
-                        ) =>
+                        onChange={(e) =>
                           handleSpotImageChange(
                             index,
                             e
@@ -2145,22 +1514,25 @@ export default function PostEditPage() {
                       />
                     </label>
                   )}
+
                 </div>
               )
             )}
+
           </div>
+
+          {/* 場所追加 */}
 
           {spots.length <
             MAX_SPOTS && (
             <button
               type="button"
-              onClick={
-                addSpot
-              }
+              onClick={addSpot}
               style={
                 addSpotButton
               }
             >
+
               <span
                 style={
                   addSpotIcon
@@ -2172,6 +1544,7 @@ export default function PostEditPage() {
               <span>
                 訪れた場所を追加
               </span>
+
             </button>
           )}
 
@@ -2180,9 +1553,9 @@ export default function PostEditPage() {
               spotHelpText
             }
           >
-            必要な数だけ追加できます。
-            使わない項目は削除できます。
+            必要な数だけ追加できます。使わない項目は削除できます。
           </p>
+
         </section>
       )}
 
@@ -2195,11 +1568,13 @@ export default function PostEditPage() {
           conditionSection
         }
       >
+
         <div
           style={
             conditionHeader
           }
         >
+
           <p
             style={
               conditionMini
@@ -2227,6 +1602,7 @@ export default function PostEditPage() {
               ? "この旅に当てはまるものを選んでください。"
               : "この場所に当てはまるものを選んでください。"}
           </p>
+
         </div>
 
         <div
@@ -2234,10 +1610,9 @@ export default function PostEditPage() {
             conditionWrap
           }
         >
+
           {conditionOptions.map(
-            (
-              condition
-            ) => {
+            (condition) => {
               const selected =
                 conditions.includes(
                   condition
@@ -2245,9 +1620,7 @@ export default function PostEditPage() {
 
               return (
                 <button
-                  key={
-                    condition
-                  }
+                  key={condition}
                   type="button"
                   onClick={() =>
                     toggleCondition(
@@ -2261,6 +1634,7 @@ export default function PostEditPage() {
                       : {}),
                   }}
                 >
+
                   <span
                     style={{
                       ...conditionCheck,
@@ -2275,10 +1649,12 @@ export default function PostEditPage() {
                   </span>
 
                   {condition}
+
                 </button>
               );
             }
           )}
+
         </div>
 
         {conditions.length >
@@ -2292,6 +1668,7 @@ export default function PostEditPage() {
             個の条件を選択中
           </p>
         )}
+
       </section>
 
       {/* ========================================
@@ -2301,23 +1678,23 @@ export default function PostEditPage() {
       <section
         style={formSection}
       >
-        <p
-          style={sectionMini}
-        >
+
+        <p style={sectionMini}>
           TAGS
         </p>
 
-        <h2
-          style={sectionTitle}
-        >
+        <h2 style={sectionTitle}>
           {postType === "trip"
             ? "この旅を表すタグ"
             : "この場所を表すタグ"}
         </h2>
 
         <div
-          style={tagWrap}
+          style={
+            tagWrap
+          }
         >
+
           {recommendedTags.map(
             (tag) => (
               <button
@@ -2326,14 +1703,13 @@ export default function PostEditPage() {
                 onClick={() =>
                   addTag(tag)
                 }
-                style={
-                  tagBtn
-                }
+                style={tagBtn}
               >
                 #{tag}
               </button>
             )
           )}
+
         </div>
 
         <input
@@ -2350,44 +1726,28 @@ export default function PostEditPage() {
               "12px",
           }}
         />
+
       </section>
 
       {/* ========================================
-          保存ボタン
+          投稿ボタン
       ======================================== */}
 
       <button
         type="button"
-        onClick={
-          handleSave
-        }
-        disabled={saving}
+        onClick={handlePost}
+        disabled={loading}
         style={{
           ...mainBtn,
           opacity:
-            saving ? 0.6 : 1,
+            loading ? 0.6 : 1,
         }}
       >
-        {saving
-          ? "保存中..."
-          : "変更を保存する"}
-      </button>
-
-      {/* キャンセル */}
-
-      <button
-        type="button"
-        onClick={() =>
-          router.push(
-            `/experience/${postId}`
-          )
-        }
-        disabled={saving}
-        style={
-          cancelButton
-        }
-      >
-        変更を破棄して戻る
+        {loading
+          ? "投稿中..."
+          : postType === "trip"
+          ? "旅を投稿する"
+          : "場所を投稿する"}
       </button>
 
       {/* 完了 */}
@@ -2396,9 +1756,12 @@ export default function PostEditPage() {
         <div
           style={toast}
         >
-          投稿を更新しました！
+          {postType === "trip"
+            ? "旅を投稿しました！"
+            : "場所を投稿しました！"}
         </div>
       )}
+
     </main>
   );
 }
@@ -2415,8 +1778,7 @@ const container = {
 };
 
 const back = {
-  textDecoration:
-    "none",
+  textDecoration: "none",
   color: "#66736D",
   fontSize: "14px",
 };
@@ -2427,11 +1789,9 @@ const guideBox = {
 };
 
 const guideMini = {
-  margin:
-    "0 0 6px",
+  margin: "0 0 6px",
   fontSize: "11px",
-  letterSpacing:
-    "0.12em",
+  letterSpacing: "0.12em",
   color: "#829189",
 };
 
@@ -2464,12 +1824,9 @@ const typeGrid = {
 };
 
 const typeCard = {
-  position:
-    "relative" as const,
-  padding:
-    "22px 18px",
-  borderRadius:
-    "18px",
+  position: "relative" as const,
+  padding: "22px 18px",
+  borderRadius: "18px",
   border:
     "1px solid #DDE5DF",
   background: "#fff",
@@ -2480,10 +1837,8 @@ const typeCard = {
     "flex-start" as const,
   textAlign:
     "left" as const,
-  cursor:
-    "pointer",
-  fontFamily:
-    "inherit",
+  cursor: "pointer",
+  fontFamily: "inherit",
 };
 
 const typeCardSelected = {
@@ -2495,14 +1850,12 @@ const typeCardSelected = {
 
 const typeIcon = {
   fontSize: "28px",
-  marginBottom:
-    "10px",
+  marginBottom: "10px",
 };
 
 const typeName = {
   fontSize: "19px",
-  fontWeight:
-    "bold",
+  fontWeight: "bold",
   color: "#1F3D2B",
 };
 
@@ -2516,8 +1869,7 @@ const typeDescription = {
 const typeSelectedMark = {
   marginTop: "13px",
   fontSize: "11px",
-  fontWeight:
-    "bold",
+  fontWeight: "bold",
   color: "#1F3D2B",
 };
 
@@ -2526,16 +1878,13 @@ const typeSelectedMark = {
 ////////////////////////////////////////////////
 
 const formSection = {
-  marginBottom:
-    "30px",
+  marginBottom: "30px",
 };
 
 const sectionMini = {
-  margin:
-    "0 0 6px",
+  margin: "0 0 6px",
   fontSize: "11px",
-  letterSpacing:
-    "0.12em",
+  letterSpacing: "0.12em",
   color: "#829189",
 };
 
@@ -2564,8 +1913,7 @@ const input = {
   width: "100%",
   boxSizing:
     "border-box" as const,
-  padding:
-    "14px 15px",
+  padding: "14px 15px",
   borderRadius:
     "13px",
   border:
@@ -2581,10 +1929,8 @@ const textarea = {
   width: "100%",
   boxSizing:
     "border-box" as const,
-  minHeight:
-    "150px",
-  padding:
-    "14px 15px",
+  minHeight: "150px",
+  padding: "14px 15px",
   borderRadius:
     "13px",
   border:
@@ -2600,10 +1946,8 @@ const textarea = {
 
 const smallTextarea = {
   ...textarea,
-  minHeight:
-    "100px",
-  marginBottom:
-    "12px",
+  minHeight: "100px",
+  marginBottom: "12px",
 };
 
 ////////////////////////////////////////////////
@@ -2611,21 +1955,17 @@ const smallTextarea = {
 ////////////////////////////////////////////////
 
 const photoSection = {
-  marginBottom:
-    "36px",
+  marginBottom: "36px",
 };
 
 const photoHeader = {
-  marginBottom:
-    "16px",
+  marginBottom: "16px",
 };
 
 const photoMini = {
-  margin:
-    "0 0 6px",
+  margin: "0 0 6px",
   fontSize: "11px",
-  letterSpacing:
-    "0.12em",
+  letterSpacing: "0.12em",
   color: "#829189",
 };
 
@@ -2636,8 +1976,7 @@ const photoTitle = {
 };
 
 const photoText = {
-  margin:
-    "8px 0 0",
+  margin: "8px 0 0",
   color: "#69766F",
   fontSize: "13px",
   lineHeight: 1.7,
@@ -2651,14 +1990,10 @@ const photoGrid = {
 };
 
 const photoItem = {
-  position:
-    "relative" as const,
-  aspectRatio:
-    "1 / 1",
-  overflow:
-    "hidden",
-  borderRadius:
-    "15px",
+  position: "relative" as const,
+  aspectRatio: "1 / 1",
+  overflow: "hidden",
+  borderRadius: "15px",
   background:
     "#EEF2EF",
 };
@@ -2668,8 +2003,7 @@ const photoImage = {
   height: "100%",
   objectFit:
     "cover" as const,
-  display:
-    "block",
+  display: "block",
 };
 
 const coverLabel = {
@@ -2685,25 +2019,7 @@ const coverLabel = {
     "#1F3D2B",
   color: "#fff",
   fontSize: "11px",
-  fontWeight:
-    "bold",
-};
-
-const newImageLabel = {
-  position:
-    "absolute" as const,
-  left: "9px",
-  bottom: "9px",
-  padding:
-    "5px 9px",
-  borderRadius:
-    "999px",
-  background:
-    "#486B57",
-  color: "#fff",
-  fontSize: "10px",
-  fontWeight:
-    "bold",
+  fontWeight: "bold",
 };
 
 const photoDelete = {
@@ -2721,13 +2037,11 @@ const photoDelete = {
   color: "#fff",
   fontSize: "20px",
   lineHeight: 1,
-  cursor:
-    "pointer",
+  cursor: "pointer",
 };
 
 const photoAdd = {
-  aspectRatio:
-    "1 / 1",
+  aspectRatio: "1 / 1",
   borderRadius:
     "15px",
   border:
@@ -2775,8 +2089,7 @@ const photoFooter = {
 ////////////////////////////////////////////////
 
 const spotsSection = {
-  marginBottom:
-    "34px",
+  marginBottom: "34px",
 };
 
 const spotsHeader = {
@@ -2786,8 +2099,7 @@ const spotsHeader = {
   alignItems:
     "flex-start",
   gap: "20px",
-  marginBottom:
-    "18px",
+  marginBottom: "18px",
 };
 
 const spotCount = {
@@ -2801,8 +2113,7 @@ const spotCount = {
   color:
     "#61736A",
   fontSize: "12px",
-  fontWeight:
-    "bold",
+  fontWeight: "bold",
 };
 
 const spotsList = {
@@ -2814,8 +2125,7 @@ const spotsList = {
 
 const spotCard = {
   padding: "18px",
-  borderRadius:
-    "18px",
+  borderRadius: "18px",
   border:
     "1px solid #E0E7E2",
   background:
@@ -2827,8 +2137,7 @@ const spotCardHeader = {
   alignItems:
     "center",
   gap: "11px",
-  marginBottom:
-    "15px",
+  marginBottom: "15px",
 };
 
 const spotNumberCircle = {
@@ -2846,8 +2155,7 @@ const spotNumberCircle = {
     "#1F3D2B",
   color: "#fff",
   fontSize: "13px",
-  fontWeight:
-    "bold",
+  fontWeight: "bold",
 };
 
 const spotCardTitleArea = {
@@ -2869,8 +2177,7 @@ const spotCardMini = {
 const spotCardTitle = {
   fontSize: "14px",
   color: "#30483C",
-  overflow:
-    "hidden",
+  overflow: "hidden",
   textOverflow:
     "ellipsis",
   whiteSpace:
@@ -2917,18 +2224,15 @@ const spotPhotoIcon = {
 const spotPhotoPreviewWrap = {
   position:
     "relative" as const,
-  marginTop:
-    "2px",
+  marginTop: "2px",
 };
 
 const spotPhotoPreview = {
   width: "100%",
-  maxHeight:
-    "240px",
+  maxHeight: "240px",
   objectFit:
     "cover" as const,
-  display:
-    "block",
+  display: "block",
   borderRadius:
     "13px",
 };
@@ -2951,27 +2255,9 @@ const spotPhotoRemove = {
     "pointer",
 };
 
-const spotNewLabel = {
-  position:
-    "absolute" as const,
-  left: "9px",
-  bottom: "9px",
-  padding:
-    "5px 9px",
-  borderRadius:
-    "999px",
-  background:
-    "#486B57",
-  color: "#fff",
-  fontSize: "10px",
-  fontWeight:
-    "bold",
-};
-
 const addSpotButton = {
   width: "100%",
-  marginTop:
-    "14px",
+  marginTop: "14px",
   padding: "15px",
   display: "flex",
   alignItems:
@@ -3015,11 +2301,9 @@ const spotHelpText = {
 ////////////////////////////////////////////////
 
 const conditionSection = {
-  marginBottom:
-    "32px",
+  marginBottom: "32px",
   padding: "22px",
-  borderRadius:
-    "18px",
+  borderRadius: "18px",
   background:
     "#F6F8F6",
   border:
@@ -3027,8 +2311,7 @@ const conditionSection = {
 };
 
 const conditionHeader = {
-  marginBottom:
-    "18px",
+  marginBottom: "18px",
 };
 
 const conditionMini = {
@@ -3155,7 +2438,7 @@ const tagBtn = {
 };
 
 ////////////////////////////////////////////////
-// 保存ボタン
+// 投稿ボタン
 ////////////////////////////////////////////////
 
 const mainBtn = {
@@ -3170,99 +2453,6 @@ const mainBtn = {
   fontWeight:
     "bold",
   fontSize: "16px",
-  cursor:
-    "pointer",
-};
-
-const cancelButton = {
-  width: "100%",
-  marginTop:
-    "10px",
-  padding: "14px",
-  borderRadius:
-    "999px",
-  border:
-    "1px solid #D8E0DB",
-  background:
-    "#fff",
-  color:
-    "#53645C",
-  fontWeight:
-    "bold",
-  fontSize: "14px",
-  cursor:
-    "pointer",
-};
-
-////////////////////////////////////////////////
-// ローディング
-////////////////////////////////////////////////
-
-const loadingBox = {
-  marginTop:
-    "60px",
-  padding:
-    "40px 20px",
-  textAlign:
-    "center" as const,
-  color:
-    "#69766F",
-  fontSize:
-    "14px",
-};
-
-////////////////////////////////////////////////
-// エラー
-////////////////////////////////////////////////
-
-const errorBox = {
-  marginTop:
-    "60px",
-  padding:
-    "30px 24px",
-  borderRadius:
-    "18px",
-  background:
-    "#F6F8F6",
-  border:
-    "1px solid #E2E8E4",
-  textAlign:
-    "center" as const,
-};
-
-const errorTitle = {
-  margin:
-    "0 0 10px",
-  color:
-    "#1F3D2B",
-  fontSize:
-    "21px",
-};
-
-const errorText = {
-  margin:
-    "0 0 20px",
-  color:
-    "#69766F",
-  fontSize:
-    "14px",
-  lineHeight:
-    1.7,
-};
-
-const backButton = {
-  padding:
-    "11px 20px",
-  borderRadius:
-    "999px",
-  border:
-    "1px solid #D8E0DB",
-  background:
-    "#fff",
-  color:
-    "#53645C",
-  fontWeight:
-    "bold",
   cursor:
     "pointer",
 };
